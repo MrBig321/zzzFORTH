@@ -57,7 +57,7 @@ See the function ehci_bulk_reset in ehci.asm. There, at the top of the function,
 *************************************
 
 There is no USB-keyboard driver, however if we don't disable UHCI (or OHCI depending on which companion controller EHCI has on our computer) 
-in function usbdis_disable_interrupts in usb/usbdis.asm (called from kernel.asm), BIOS will get it working for us (makes it ps/2). 
+in function pci_init_usb (e.g. "call pci_uhci_disable_interrupts") in pci.asm (called from kernel.asm), BIOS will get it working for us (makes it ps/2). 
 Note that the built-in keyboard will work even if we disable the companion controller (The EHCI can have either UHCI or OHCI controller 
 as its companion controller).
 
@@ -75,7 +75,7 @@ USBFSREM updates FSInfo structure on the usb-disk.
 Unicode characters will be skipped: if there is one or more unicode characters in a filename, 
 we can substitute them with any ascii char (e.g. 'x').
 For example in case of a folder, called "Hxz", the 'x' is in the place of a hungarian character.
-So, the file/folder will be found.
+So, the file or folder will be found.
 
 *************************************
 How to use USB-EHCI:
@@ -120,7 +120,7 @@ HEX
 1000000 USBFSREAD BIGF.TXT" . .         ( size is 0xb5)
 1000000 100 DUMP
 
-1000000 b5 USBFSWRITE TEST.TXT" .	( can write SFN-entries only; 8.3 CAPITALS)
+1000000 b5 USBFSWRITE TEST.TXT" .	    ( can write SFN-entries only; 8.3 CAPITALS)
 
 ***************************************
 For both EHCI and XHCI:
