@@ -5364,6 +5364,7 @@ xhci_init_msd:
 			mov eax, [xhci_context_size]
 			mov ebx, xHCI_CONTROL_EP
 			mul	ebx
+		mov ebp, [xhci_slot_addr]   ; This was missing. How could it work!?
 			add ebp, eax
 			mov ebx, xhci_ep_context
 			call xhci_read_from_ep
