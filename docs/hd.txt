@@ -1,0 +1,27 @@
+The assembly-code (pci_init_hd) tries to detect IDE and SATA controllers on 
+the PCI-Bus. 
+If it manages to find either or both of them, 
+it disables interrupts and enables BusMaster, MemorySpace and I/OSpace.
+Then, in case of IDE, it swithes IDE to native mode and disables interrupts.
+If SATA was found, it tries to switch it to IDE-mode and disables interrupts.
+If right after boot, IDE is shown after "HD:", then we can load and use the IDE-driver (fthsrc/drivers/ide.txt)
+Currently there is no SATA-driver, so if SATA is shown, we won't be able to use that drive (we need to write the SATA-driver).
+
+HDDET needs to be executed first.
+If it returns TRUE (i.e. -1), then we can execute HDINFO and/or HDREAD/HDWRITE.
+
+We can make ZFOS to boot from HD, if we do the followings:
+1. write mbr.bin to sector0 of the HD
+2. write hdloader.bin to sector1 of the HD
+3. write the bytes of ZFOS to the next sectors of the HD
+Note that in boot/HD/hdloader.asm there is the following line:
+%define SECTOR_CNT	199		; number of sectors of the kernel  (hexdump -C KRNL.SYS, and length/512)
+So we need to update SECTOR_CNT. KRNL.SYS is ZFOS.
+
+( Public words:)
+HDDET  ( -- flag )
+HDINFO  ( -- )
+HDREAD  ( memaddr sectcnt lbalo lbahi -- flag )
+HDWRITE  ( memaddr sectcnt lbalo lbahi -- flag )
+
+
