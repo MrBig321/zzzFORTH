@@ -2619,7 +2619,7 @@ _paren_loop_paren:
 
 ;*********************************************
 ; _paren_plus_loop_paren	(+LOOP)
-;	( -- )
+;	( step -- )
 ;	Runtime procedure compiled by +LOOP, which 
 ;	increments the loop index by n and tests for 
 ;	loop completion
@@ -2629,35 +2629,20 @@ _paren_plus_loop_paren:
 			add [edi+CELL_SIZE], eax
 			mov ebx, [edi]				; EBX: Limit
 			mov ecx, [edi+CELL_SIZE]	; ECX: Index
-			; in order to support: "X Y do I . Z +loop", where X, Y and Z can be pos or neg
-			cmp ebx, 0
-			jge .ChkPosIdx
-			jmp .ChkNegIdx
-.ChkPosIdx	cmp ecx, 0
-			jge .ChkPos
-			; here Limit is positive but Index is negative (Mixed)
-			cmp ecx, ebx
-			jc .Gte
+			cmp eax, 0
+			jng	.ChkNeg
+			cmp ebx, ecx
+			jng	.Done
 			jmp .Next
-.ChkPos		cmp ecx, ebx				; Both are positive. Compare them
-			jge .Gte
-			jmp .Next
-.ChkNegIdx	cmp ecx, 0
-			jnge .ChkNeg
-			; here Limit is negative but Index is positive (Mixed)
-			cmp ecx, ebx
-			jnc .Gte
-			jmp .Next
-.ChkNeg		cmp ecx, ebx				; Both are negative. Compare them
-			jna .Gte
-			jmp .Next
+.ChkNeg		cmp ebx, ecx
+			jg	.Done
 .Next		mov ebx, [_ip]
 			add ebx, CELL_SIZE
 			mov eax, [ebx]
-			add [_ip], eax
+			add [_ip], eax						; (colon) increments ip, so we set it to dpto(do)
 			jmp .Back
-.Gte		add DWORD [_ip], CELL_SIZE
-			add edi, 2*CELL_SIZE
+.Done		add DWORD [_ip], CELL_SIZE
+			add	edi, 2*CELL_SIZE
 .Back		ret
 
 
@@ -3402,19 +3387,19 @@ _semi_colon:
 			call mark_word
 			ret
 
-
 ;*********************************************
-; _sign
+; _sign				SIGN
 ;	( n -- )
-;	If n is negative adds a minus sign to PNO
+; If n is negative, add a minus sign to the 
+; beginning of the pictured numeric output string.
 ;*********************************************
-_sign:
+_sign: 
 			POP_PS(eax)
-			cmp eax, 0
-			jge .Back
+			test eax, 1 << 31
+			jz	.Back
+			sub DWORD [p_pnos], CHAR_SIZE
 			mov ebx, [p_pnos]
 			mov BYTE [ebx], '-'
-			sub DWORD [p_pnos], CHAR_SIZE
 			inc BYTE [in_pnos]
 .Back		ret
 
