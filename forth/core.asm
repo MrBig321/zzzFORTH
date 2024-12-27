@@ -2650,8 +2650,6 @@ _paren_plus_loop_paren:
 ;	_paren_postpone_paren
 ;	( -- )
 ;	Runtime code of POSTPONE.
-;	If execution-depth is 1: executes "compile," ,
-;	otherwise skips it (adds CELL_SIZE to _ip)
 ;*********************************************
 _paren_postpone_paren:
 			add	DWORD [_ip], CELL_SIZE
@@ -2910,8 +2908,10 @@ _postpone:	; ?!
 			call _find
 			cmp DWORD [esi], 0
 			jz	.NotFnd
+			mov ebx, [esi]
+			add ebx, CELL_SIZE
 			xor eax, eax
-			mov al, BYTE [esi+CELL_SIZE]	; flags|len-byte to EAX
+			mov al, BYTE [ebx]	; flags|len-byte to EAX
  			call _to_body					; get dptoxt
 			POP_PS(ebx)						; dptoxt to EBX
 			jmp .Test
