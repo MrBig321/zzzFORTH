@@ -1,0 +1,14 @@
+ 
+See the files in python/astro.
+The algorithms in "Jean Meeus: Astronomical Algorithms 2nd Ed." were programmed.
+The code computes planetary positions, Asc, MC and housesystems for the given date, time and place.
+
+Execute it on Linux:
+python3 ./test.py
+
+This code should be translated to FORTH with a 32-bit OS (with DCELLs 64-bits), with fixed-point math.
+Hopefully it is possible without loosing precision. 
+With the 64-bit version of ZFOS (with DCELLs 128-bits), it is for sure possible with fixed-point math. 
+However currently there is no 64-bit ZFOS.
+
+
