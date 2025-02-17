@@ -1,0 +1,109 @@
+( TODO!!)
+: HUFFMAN ;  ( marker for FORGET)
+
+DECIMAL
+
+: KEY? KEYW DISCARD DROP ; ( for testing)
+
+( prints no space after number, unlike dot )
+: PRNSP  ( n -- )
+   S>D <# #S #> TYPE ;
+
+( Here we store only the frequency in 32bits, the symbol is the index)
+( If we can't use this memory anymore --> use a memory address from FMM !?)
+CREATE SYMBOLS 256 CELLS ALLOT 
+
+( ordered symbols, 1 byte for the symbol, a 32bit for the freq)
+CREATE SYMS 256 256 CELLS + ALLOT 
+
+: CLSYM  ( -- )
+   SYMBOLS 256 CELLS ERASE ;
+
+: GFREQ  ( memaddr len -- )
+   0 DO 1 OVER C@ CELLS SYMBOLS + +! 1+ LOOP ; 
+
+: CP2SYMS  ( -- len )
+   SYMBOLS SYMS 256 0 DO OVER @ DUP 0<> IF OVER I SWAP C! OVER 1+ ! 1+ CELL+ ELSE DROP THEN SWAP CELL+ SWAP LOOP NIP SYMS - 1 CELLS 1+ / ; 
+
+( ***sorting***)
+
+1 1 CELLS + CONSTANT QITEMSI 
+
+CREATE QTMP QITEMSI ALLOT 
+
+: QITEMOFFS  ( memaddr p -- memmaddr+ ) 
+   QITEMSI * + ; 
+
+( call it ITEM@ !?)
+: QITEMVAL  ( itemaddr -- val )
+   1+ @ ; 
+
+: QITEMCP  ( fromaddr toaddr -- )
+   QITEMSI CMOVE ;
+
+: QSWAPIT  ( addr i j -- )
+   2 PICK SWAP QITEMOFFS DUP QTMP QITEMCP >R QITEMOFFS 
+   DUP R> QITEMCP QTMP SWAP QITEMCP ;
+
+: QJFIND  ( addr j x -- j )
+   BEGIN 
+     >R 1- DUP 0 >= OVER 3 PICK SWAP QITEMOFFS QITEMVAL R@ > AND 
+     INVERT R> SWAP 
+   UNTIL DROP NIP ; 
+
+: QIFIND  ( addr i r x -- i )
+   BEGIN 
+     >R >R 1+ DUP R@ 1+ < OVER 3 PICK SWAP QITEMOFFS QITEMVAL 2R@ 
+     DROP < AND INVERT R> R> ROT  
+   UNTIL 2DROP NIP ; 
+
+: QPARTITION  ( addr p r -- j )
+   DUP >R 1+ >R              ( R: r j )
+   DUP 1- >R     ( addr p )  ( R: r j i )
+   OVER SWAP QITEMOFFS QITEMVAL   ( addr x )  ( R: r j i )
+   BEGIN
+     2DUP 2R@ DROP SWAP QJFIND 2R> NIP 2>R 
+     2DUP 2R> R@ OVER 3 ROLL SWAP 2>R ROT QIFIND R> DROP >R 
+     2R@ SWAP < 
+     IF OVER 2R@ SWAP QSWAPIT FALSE ELSE TRUE THEN 
+   UNTIL 2DROP 2R> R> 2DROP ; 
+
+( Iterative quicksort)
+( : QSORT)  ( addr nBeg nEnd -- )
+: QSORT  ( addr len -- )
+   0 SWAP  ( to have: addr nBeg nEnd on pstack)
+   1 >R  ( count of [beg, end] pair is stored on RStack)
+   BEGIN 
+     2DUP SWAP - 1 >= 
+     IF 
+       2DUP R@ 2* 2+ PICK ROT ROT QPARTITION   ( addr beg end p )
+       DUP >R 1+ SWAP ROT R> R> 1+ >R 
+     ELSE 2DROP R> 1- >R 
+     THEN 
+     R@ 0=     
+   UNTIL R> 2DROP ; 
+
+( ***END of sorting***)
+
+VARIABLE SISYMS 
+
+( **********)
+( Add new nodes to SYMS, keep the nodes that we used for the new one)
+( In left/right ptr, we store the index of the given node)
+( Check overflow, because 256 items may not be enough for the newly added nodes to; call ABORT")
+: MAKETREE  ( -- )
+   ;
+
+: HUFF  ( memaddr len -- )
+   CLSYM GFREQ CP2SYMS SISYMS ! 
+   SYMS SISYMS @ 1- QSORT MAKETREE ; 
+
+: PRSYMBOLS  ( -- )
+   CR SYMBOLS 256 0 DO DUP @ DUP 0<> 
+   IF I PRNSP 58 EMIT . ELSE DROP THEN CELL+ LOOP DROP CR ; 
+
+: PRSYMS  ( -- )
+   CR SYMS SISYMS @ 0 DO DUP C@ PRNSP 58 EMIT DUP 1+ ? 1+ CELL+ LOOP DROP CR ; 
+
+
+

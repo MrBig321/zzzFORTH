@@ -1,0 +1,9 @@
+
+: FAC  ( n -- fac )
+   1+ 1 SWAP 1 DO I * LOOP ;
+
+( Ok, but needs to be called with n+1)  ( 0! 1! are ok)
+: FACR ( n 1 -- fac )
+   SWAP 1- DUP 1 > IF SWAP OVER * RECURSE THEN DROP ; 
+
+

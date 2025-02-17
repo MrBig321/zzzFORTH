@@ -1,0 +1,30 @@
+DECIMAL
+
+: KEY? KEYW DISCARD DROP ; ( for testing)
+
+( Computes 16.16 square root)
+: ISQRT  ( n1 -- n2Q16bit )  ( *10^6 / 2^16 to have Q6 FixedPointDecimal)
+   DUP 0= IF EXIT THEN 
+   1073741824  ( 2^30)
+   0 >R  ( r b )  ( R: q )
+   DUP 0> 
+   IF 
+    ( r b )  ( R: q )
+     BEGIN
+( CR ." After BEGIN .S=" .S  ." q=" R@ . KEY?)
+       SWAP OVER R@ +  ( b r t )  ( R: q )
+( CR ." After t .S=" .S ." q=" R@ . KEY?)
+       2DUP U>= 
+       IF
+( CR ." In if" KEY?)
+         DUP >R -   ( b r )  ( R: q t )
+         OVER 2R> NIP + >R  ( b r )  ( R: q )
+       ELSE DROP
+       THEN 
+( CR ." After THEN .S=" .S ." q=" R@ . KEY?)
+       2* SWAP 2/  ( r b )  ( R: q )
+       DUP 0= 
+     UNTIL 
+   THEN DROP R@ U> R> SWAP IF 1+ THEN ;
+
+

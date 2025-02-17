@@ -1,0 +1,68 @@
+ 
+DECIMAL
+
+: KEY? KEYW DISCARD DROP ; ( for testing)
+
+( Computes 16.16 square root)
+: ISQRT  ( n1 -- n2Q16bit )  ( *10^6 / 2^16 to have Q6 FixedPointDecimal)
+   DUP 0= IF EXIT THEN 
+   1073741824  ( 2^30)
+   0 >R  ( r b )  ( R: q )
+   DUP 0> 
+   IF 
+    ( r b )  ( R: q )
+     BEGIN
+( CR ." After BEGIN .S=" .S  ." q=" R@ . KEY?)
+       SWAP OVER R@ +  ( b r t )  ( R: q )
+( CR ." After t .S=" .S ." q=" R@ . KEY?)
+       2DUP U>= 
+       IF
+( CR ." In if" KEY?)
+         DUP >R -   ( b r )  ( R: q t )
+         OVER 2R> NIP + >R  ( b r )  ( R: q )
+       ELSE DROP
+       THEN 
+( CR ." After THEN .S=" .S ." q=" R@ . KEY?)
+       2* SWAP 2/  ( r b )  ( R: q )
+       DUP 0= 
+     UNTIL 
+   THEN DROP R@ U> R> SWAP IF 1+ THEN ;
+
+
+: ATAN2  ( yQ6 xQ6  -- nQ6 )
+   OVER ABS OVER ABS 
+   ( yQ6 xQ6 |yQ6| |xQ6| )
+   2DUP MAX >R MIN S>D 
+   10 6 POW R> M*/ 
+   ( yQ6 xQ6 dAQ6 )
+   2DUP D>S DUP >R 10 6 POW M*/ D>S 
+   ( yQ6 xQ6 sQ6 )   ( R: aQ6 )
+   >R
+   ( yQ6 xQ6 )   ( R: aQ6 sQ6 )
+   -464964749. ( dQ10) R@ 10 6 POW M*/ ( dQ10)
+   1593142200. D+ R@ 10 6 POW M*/ ( dQ10) 
+   3276227640. D- R> 10 6 POW M*/ ( dQ10)
+   R@ 10 6 POW M*/ ( dQ10)
+   R> S>D 10 4 POW 1 M*/ D+ 
+   ( yQ6 xQ6 rdQ10 )  
+   2>R  ( yQ6 xQ6 )   ( R: rdQ10 )  
+   2DUP >R ABS R> ABS > 
+   IF 15707963700. 2R> D- 2>R THEN  
+   ( yQ6 xQ6 )   ( R: rdQ10 )  
+   0< IF 31415927400. 2R> D- 2>R THEN 
+   ( yQ6 )   ( R: rdQ10 )  
+   2R> ROT 0< IF DNEGATE THEN 
+   1 10 4 POW M*/ D>S ; 
+
+: ATAN2NEG  ( y x  -- n )
+   DUP 0< DUP >R IF NEGATE THEN ATAN2 R> IF NEGATE THEN ;
+
+: ASIN  ( xQ6 -- yQ6 )
+   DUP >R S>D 1000000. D+ 1000000 R@ - 10 6 POW M*/ 
+   D>S ISQRT S>D 10 3 POW 1 M*/ 16 DRSHIFT D>S R> SWAP ATAN2NEG ;
+
+: ACOS  ( xQ6 -- yQ6 )
+   DUP >R S>D 1000000. D+ 1000000 R@ - 10 6 POW M*/ 
+   D>S ISQRT S>D 10 3 POW 1 M*/ 16 DRSHIFT D>S R> ATAN2NEG ;
+
+

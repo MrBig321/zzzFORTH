@@ -1,0 +1,70 @@
+( NOTE: Untested!!)
+( From the book Pyeatt, Ughetta-ARM 64-BIT ASSEMBLY LANGUAGE)
+( C-code: isinARM.c)
+
+( This file provides functions for calculating sine and 
+  cosine using fidex-point arithmetic.
+  It uses the first nine terms in the Taylor series.)
+
+: ISIN ;  ( marker for FORGET)
+
+: KEY?  ( -- )
+   KEYW DISCARD DROP ;
+
+HEX
+
+03243F6A8 CONSTANT PI 	( in hex: 3.141592651605606 * 2^28)
+01921FB54 CONSTANT PI/2
+06487ED51 CONSTANT 2PI
+
+CREATE SINCOEFFS 0AAAAAAAA , 044444445 , 097F97F97 , 05C778E96 , 09466EA60 , 05849184F , 094603063 , 0654B1DC1 , 
+
+DECIMAL 
+CREATE SINSHIFTS 0 C, 2 C, 6 C, 10 C, 15 C, 20 C, 26 C, 32 C, 
+8 CONSTANT SINSIZE 
+
+: DRSHIFTARI  ( d1 n -- d2 )
+   >R DUP 1 31 LSHIFT AND 0<> DUP >R IF DNEGATE THEN 2R@ DROP DRSHIFT 2R> NIP IF DNEGATE THEN ; 
+
+( x: S[1,30]  0<=x<=pi/2)
+( y: S[3,28])
+( 32bitCurpower, 64bitXsq=x*x>>31[usedjustonce], 64bitSum=x<<31)
+: SINQ  ( x -- y )
+   DUP >R S>D 31 DLSHIFT R@ R@ M* 31 DRSHIFTARI R> 
+  ( sum xsq curpower[32bitx] )
+ SINSIZE 0 
+   DO 
+     >R 2DUP R> 1 M*/ 31 DRSHIFTARI D>S 
+     DUP SINCOEFFS I CELLS + @ M*  
+     2DUP D0< IF 1 M+ THEN SINSHIFTS I + C@ 
+     DUP 31 > IF 31 - DRSHIFTARI 31 THEN DRSHIFTARI 
+     ROT >R 2SWAP 2>R D+ 2R> R> 
+   LOOP DROP 2DROP 31 DRSHIFTARI 2 DRSHIFTARI D>S ;
+
+( Applies symmetries to reduce the range of 
+  the input, then calls SINQ and adjusts the result.)
+: FIXEDSIN  ( x -- y )
+ ( do with MOD instead!? It is faster)
+   DUP 0< IF BEGIN 2PI +  DUP 0 >= UNTIL THEN 
+   DUP 2PI > IF BEGIN 2PI -  DUP 2PI <= UNTIL THEN 
+   DUP PI/2 <= IF 2 LSHIFT SINQ EXIT THEN 
+   DUP PI <= IF PI SWAP - 2 LSHIFT SINQ EXIT THEN 
+   DUP PI PI/2 + <= IF PI - 2 LSHIFT SINQ NEGATE EXIT THEN 
+   2PI SWAP - 2 LSHIFT SINQ NEGATE ; 
+
+( Applies the sin/cos relation to the input, 
+  then calls FIXEDSIN)
+: FIXEDCOS  ( x -- y )
+   DUP 0 <= IF 2PI + THEN 
+   PI/2 SWAP - FIXEDSIN ;
+
+: TEST ( -- )
+   PI 3 / ( 60deg in radians)
+   FIXEDSIN ( float[Result]/[1<<28] will be the floating pt result)
+   ( 0.866025)
+( 232471924.1724599 !?)
+   ;
+
+ 
+
+

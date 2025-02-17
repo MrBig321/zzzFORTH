@@ -1,0 +1,180 @@
+DECIMAL 
+
+( *** for testing ***)
+: KEY?  ( -- )
+   KEYW DISCARD DROP ;
+
+( ******************** BUBBLESORT ******************** )
+( ++++++++++ Sorting 32-bit integers ++++++++++ )
+
+VARIABLE SWAPPED 
+
+: BSWAPIT  ( addr -- )
+   DUP @ >R DUP DUP CELL+ DUP >R @ SWAP ! 2R> ! ; 
+
+ ( Bubble sort)
+: BSORT  ( addr cnt -- ) 
+   1- 
+   BEGIN  
+     FALSE SWAPPED ! 
+     2DUP 2>R 0 
+     DO 
+       DUP CELL+ OVER @ SWAP @ >   ( addrArray flag ) 
+         IF BSWAPIT TRUE SWAPPED ! THEN 
+       CELL+
+     LOOP  
+     DROP 
+     2R> 1- DUP 2 < 
+   SWAPPED @ INVERT OR UNTIL 2DROP ;
+
+( ++++++++++ Sorting structures of a byte and a 32-bit integer ++++++++++ )
+( We only need to change ITEMSI, and ITEMVAL if we add e.g. a byte to our struct,)
+( making it e.g. a byte, byte, int32 struct)
+
+1 1 CELLS + CONSTANT ITEMSI 
+
+( call it ITEM@ !?)
+: ITEMVAL  ( itemaddr -- valCmp )
+   1+ @ ; 
+
+: ITEMCP  ( fromaddr toaddr -- )
+   ITEMSI CMOVE ;
+
+( with the next item)
+: SWAPIT  ( itemaddr -- )
+   DUP C@ OVER ITEMVAL 2>R DUP DUP ITEMSI + SWAP ITEMCP ITEMSI + DUP 2R> >R SWAP C! 1+ R> SWAP ! ; 
+
+VARIABLE SWAPPED
+
+: BSORT  ( addrArray cnt -- ) 
+   1- 
+   BEGIN  
+     FALSE SWAPPED ! 
+     2DUP 2>R 0 
+     DO 
+       DUP ITEMSI + OVER ITEMVAL SWAP ITEMVAL >   ( addrArray flag ) 
+         IF DUP SWAPIT TRUE SWAPPED ! THEN 
+       ITEMSI + 
+     LOOP  
+     DROP 
+     2R> 1- DUP 2 < 
+   SWAPPED @ INVERT OR UNTIL 2DROP ;
+
+( ********************  QUICKSORT ********************  )
+( ++++++++++ Sorting 32-bit integers ++++++++++ )
+
+: QJFIND  ( addr j x -- j )
+   BEGIN 
+     >R 1- DUP 0 >= OVER 3 PICK SWAP CELLS + @ R@ > AND INVERT R> SWAP 
+   UNTIL DROP NIP ; 
+
+: QIFIND  ( addr i r x -- i )
+   BEGIN 
+     >R >R 1+ DUP R@ 1+ < OVER 3 PICK SWAP CELLS + @ 2R@ DROP < AND INVERT 
+     R> R> ROT  
+   UNTIL 2DROP NIP ; 
+
+: QSWAPIT  ( addr i j -- )
+   2 PICK SWAP CELLS + >R CELLS +  ( addr+i ) ( R: addr+j )
+   DUP @ R> DUP @ 
+  ( addr+i addr[i] addr+j addr[j] )
+   3 ROLL ! ! ; 
+
+: QPARTITION  ( addr p r -- j )
+   DUP >R 1+ >R   ( R: r j )
+   DUP 1- >R      ( R: r j i )
+   OVER SWAP CELLS + @   ( addr x )  ( R: r j i )
+   BEGIN
+     2DUP 2R@ DROP SWAP QJFIND 2R> NIP 2>R 
+     2DUP 2R> R@ OVER 3 ROLL SWAP 2>R ROT QIFIND R> DROP >R 
+     2R@ SWAP < 
+     IF OVER 2R@ SWAP QSWAPIT FALSE ELSE TRUE THEN 
+   UNTIL 2DROP 2R> R> 2DROP ; 
+
+( Iterative quicksort)
+: QSORT  ( addr nBeg nEnd -- )
+   1 >R  ( count of [beg, end] pair is stored on RStack)
+   BEGIN 
+     2DUP SWAP - 1 >= 
+     IF 
+       2DUP R@ 2* 2+ PICK ROT ROT QPARTITION   ( addr beg end p )
+       DUP >R 1+ SWAP ROT R> R> 1+ >R 
+     ELSE 2DROP R> 1- >R 
+     THEN 
+     R@ 0=     
+   UNTIL R> 2DROP ; 
+
+( ++++++++++ Sorting structures of a byte and a 32-bit integer ++++++++++ )
+( We only need to change QITEMSI, and QITEMVAL if we add e.g. a byte to our struct,)
+( making it e.g. a byte, byte, int32 struct)
+
+1 1 CELLS + CONSTANT QITEMSI 
+
+CREATE QTMP QITEMSI ALLOT 
+
+: QITEMOFFS  ( memaddr p -- memmaddr+ ) 
+   QITEMSI * + ; 
+
+( call it ITEM@ !?)
+: QITEMVAL  ( itemaddr -- val )
+   1+ @ ; 
+
+: QITEMCP  ( fromaddr toaddr -- )
+   QITEMSI CMOVE ;
+
+: QSWAPIT  ( addr i j -- )
+   2 PICK SWAP QITEMOFFS DUP QTMP QITEMCP >R QITEMOFFS 
+   DUP R> QITEMCP QTMP SWAP QITEMCP ;
+
+: QJFIND  ( addr j x -- j )
+   BEGIN 
+     >R 1- DUP 0 >= OVER 3 PICK SWAP QITEMOFFS QITEMVAL R@ > AND 
+     INVERT R> SWAP 
+   UNTIL DROP NIP ; 
+
+: QIFIND  ( addr i r x -- i )
+   BEGIN 
+     >R >R 1+ DUP R@ 1+ < OVER 3 PICK SWAP QITEMOFFS QITEMVAL 2R@ 
+     DROP < AND INVERT R> R> ROT  
+   UNTIL 2DROP NIP ; 
+
+: QPARTITION  ( addr p r -- j )
+   DUP >R 1+ >R              ( R: r j )
+   DUP 1- >R     ( addr p )  ( R: r j i )
+   OVER SWAP QITEMOFFS QITEMVAL   ( addr x )  ( R: r j i )
+   BEGIN
+     2DUP 2R@ DROP SWAP QJFIND 2R> NIP 2>R 
+     2DUP 2R> R@ OVER 3 ROLL SWAP 2>R ROT QIFIND R> DROP >R 
+     2R@ SWAP < 
+     IF OVER 2R@ SWAP QSWAPIT FALSE ELSE TRUE THEN 
+   UNTIL 2DROP 2R> R> 2DROP ; 
+
+( Iterative quicksort)
+: QSORT  ( addr nBeg nEnd -- )
+   1 >R  ( count of [beg, end] pair is stored on RStack)
+   BEGIN 
+     2DUP SWAP - 1 >= 
+     IF 
+       2DUP R@ 2* 2+ PICK ROT ROT QPARTITION   ( addr beg end p )
+       DUP >R 1+ SWAP ROT R> R> 1+ >R 
+     ELSE 2DROP R> 1- >R 
+     THEN 
+     R@ 0=     
+   UNTIL R> 2DROP ; 
+
+( *****+++++***** for testing Integer-only-sort*****+++++***** )
+CREATE TARR 5 , 3 , 8 , 9 , 4 , 2 , 6 , 10 , 1 , 7 , 
+( CREATE TARR 5 , 3 , 8 , 3 , 4 , 6 , 6 , 10 , 1 , 1 , )
+10 CONSTANT TARRLEN 
+
+: PRTARR  ( -- )
+   TARR TARRLEN 0 DO DUP ? CELL+ LOOP DROP ;
+
+: TESTBSORT  ( -- )
+   CR PRTARR TARR TARRLEN BSORT CR PRTARR CR ;
+
+: TESTQSORT  ( -- )
+   CR PRTARR TARR 0 TARRLEN 1- QSORT CR PRTARR CR ; 
+( *****+++++***** END of for testing *****+++++***** )
+
+
