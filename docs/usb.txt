@@ -1,0 +1,106 @@
+Recommended reading: "Benjamin David Lunt: USB: The Universal Serial Bus" (I bought the 1st edition, a long time ago)
+With this book I have managed to write the EHCI driver from scratch in assembly in a month.
+
+This OS doesn't use the mouse (it's best to unplug it).
+Currently external HUBs are not supported.
+
+There is no USB-keyboard driver, however if we don't disable UHCI (or OHCI depending on which companion controller EHCI has on our computer) 
+in function pci_init_usb (e.g. "call pci_uhci_disable_interrupts") in pci.asm (called from kernel.asm), BIOS will get it working for us (makes it ps/2). 
+Note that the built-in keyboard will work even if we disable the companion controller (The EHCI can have either UHCI or OHCI controller 
+as its companion controller).
+
+*************************************
+EHCI	
+*************************************
+The code works with QEMU and the current version of the Bochs-Emulator ( September, 2024.). 
+It can successfully execute the USB-related words (see forth/fthsrc/drivers/usb/ehci.txt). 
+So, for example it can read files from the pendrive-image with QEMU. 
+It works on real hardware but the FORTH-code of EHCI was only tested with one computer (an Asus Eee PC).
+
+How to use USB-EHCI:
+
+If after boot EHCI is shown after "USB:", then we can load and use the ehci driver.
+Copy ehci.txt to output (folder) an rename it to USB.TXT. 
+Copy usbfs.txt to output an rename it to USBFS.TXT. 
+Rebuild with buildAll.sh
+See in the common section below the example of using the USB-words.
+
+***************************************************************
+XHCI
+***************************************************************
+The code works with the current version of the Bochs-Emulator ( September, 2024.). 
+It can successfully execute the USB-related words (see forth/fthsrc/drivers/usb/xhci.txt). 
+So, for example it can read files from the pendrive-image with Bochs-XHCI. 
+SuperSpeed devices!?
+It works on real hardware but it was only tested with one laptop: Dell Inspiron 5559.
+It doesn't work with QEMU.
+
+I have only one computer with XHCI, and that is my development computer.
+So, XHCI hasn't been thoroughly tested on real hardware.
+
+How to use USB-XHCI:
+
+If after boot XHCI is shown after "USB:", then we can load and use the xhci driver.
+Copy xhci.txt to output (folder) an rename it to USB.TXT. 
+Copy usbfs.txt to output an rename it to USBFS.TXT. 
+Rebuild with buildAll.sh
+See in the common section below the example of using the USB-words.
+
+***************************************
+For both EHCI and XHCI:
+***************************************
+Both USB.TXT and USBFS.TXT will be loaded during boot to RAM.
+With the code in USB.TXT, we can read and write sectors ( Mass Storage Device).
+USBFS.TXT contains the code related to FAT32.
+LUSB loads both of them.
+Currently USBFS.TXT can only read files from a pendrive formatted to FAT32.
+However, there is USBWRITE in ehci.txt and xhci.txt, but it hasn't been tested yet.
+See usbASM.txt for details, because the FORTH-code uses the same logic.
+
+How to use:
+
+LUSB .									( loads usb-related words to the dictionary; calls _loadm for each)
+USBENUM .                               ( in my case, returns 2 as device-address)
+2 USBFSINIT . . . . 
+FALSE USBFSLS .
+HEX
+20000000 USBFSREAD BIGF.TXT" . .         ( size is 0xb5)
+20000000 100 DUMP
+FORGET USB
+
+20000000 b5 LOADM 
+
+We can unplug the pendrive anytime after a command (e.g. USBFSREAD).
+
+Unicode characters will be skipped: if there is one or more unicode characters in a filename, 
+we can substitute them with any ascii char (e.g. 'x').
+For example in case of a folder, called "Hxz", the 'x' is in the place of a hungarian character.
+So, the file or folder will be found.
+
+If USBENUM prints more than one device, then after USBFSINIT we can use one of the devices.
+As soon as we are done with that device, we can execute USBFSINIT for another device and use that.
+
+We use double-quotes as a delimiter and not the usual SPACE in case of filenames ( e.g. 20000000 USBFSREAD Test.txt" . . ).
+This way the filename can contain spaces (the LongFilename-entry).
+We can switch back to using SPACE if we change USBFSCD and USBFSREAD ("022 WORD" to "020 WORD").
+
+On Linux:
+"lsusb -v" prints device descriptors
+"lsusb -t" prints ports
+
+( Public words:)
+LUSB	( -- flag )		( it is defined in in forth/core.asm)
+USBENUM ( -- flag )
+USBDEVINFO ( devaddr idx -- flag )
+USBINITMSD ( devaddr -- lbaHI lbaLO sectorsize flag )
+USBREAD ( lbaHI lbaLO memaddr sectorcnt -- flag )
+USBWRITE ( lbaHI lbaLO memaddr sectorcnt -- flag )
+
+USBFSINIT ( devaddr -- lbaL lbaHi SectorSize flag )
+USBFSINFO ( -- flag) // prints info about the filesystem
+USBFSLS ( flag -- flag )   ( flag: short list or long list)
+USBFSCD (  "<spaces>name" -- flag )
+USBFSPWD ( -- flag )
+USBFSREAD ( memaddr "<spaces>name" -- lengthInBytes flag )
+
+

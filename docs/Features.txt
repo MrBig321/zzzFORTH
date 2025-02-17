@@ -1,0 +1,40 @@
+zzzFORTH (also called ZFOS) Written in 32-bit Intel-assembly and FORTH
+The best FORTH tutorial is "Starting FORTH by Leo Brodie":
+https://www.forth.com/starting-forth/
+
+- Resolutions: 1024*768*16 or 640*480*16 (for Eee PC) 
+- Multitasking (but only one core or CPU is used)
+- Can boot from Floppy/HD/USB-MSD
+In FORTH (in ZFOS/fthsrc/):
+- IDE hard disk driver
+- USB(EHCI, XHCI) driver (can read files from pendrives formatted to FAT32) 
+- HDAUDIO driver (very limited)
+- BLOCK
+- HEXVW, HEXED
+- TXTVW, TXTED
+- SIN, COS, TAN, SQRT (fixed point math)
+- LINE, POLYGON(can be filled), CIRCLE(can be filled), PAINT
+- Sutherland-Cohen line-clipping 
+- Sutherland-Hodgman polygon clipping
+- BEZIERQ, BEZIERC
+- Scrolling of the content of rectangular areas
+- QOI image format (decode/encode) supported
+- 3D (fixed point math) (e.g. rotating cubes)
+- Astronomical algorithms (fixed point decimal)
+
+See ZFOS/docs for details
+
+The original assembly code of the drivers (IDE, HDAUDIO and USB(XHCI, EHCI)) are available in the ASM folder.
+
+***************************************
+How to build and start
+
+Add executable permission to scripts (in zzzFORTH or ZFOS folder):
+
+chmod +x [star].sh
+
+./buildAll.sh
+
+See docs/emulators.txt or docs/USBBoot.txt on how to start.
+
+

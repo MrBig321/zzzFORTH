@@ -1,0 +1,41 @@
+ 
+See the files in python/astro.
+The algorithms in "Jean Meeus: Astronomical Algorithms 2nd Ed." were programmed.
+The code computes planetary positions, Asc, MC and housesystems for the given date, time and place.
+
+Execute it on Linux:
+python3 ./test.py
+
+In ZFOS, fthsrc/astro/astro.txt: 
+Fixed Point Decimal.
+Currently the positions of the Sun, Moon, Mercury, Venus, Mars, Jupiter, Saturn, the ascending node of the Moon, the Ascendant and the MC (Medium Coeli, i.e. the local Meridian) are computed.
+Every value is stored as Q6 (i.e. 6 digits after the decimal point), however intermediate calculations many times use higher precision.
+Q6 was chosen to fit into a CELL (e.g. 239.436712 fits into 32bits).
+Simplified nutation and obliquity are computed.
+fthsrc/astro/astro.txt uses pldata.txt. 
+pldata.txt contains the data of the orbits of the planets.
+The columns are: A(DCELL) B(CELL) C(DCELL) fBandC(Byte)
+A DCELL is stored as two CELLs: low 32bits first then the high 32bits.
+fBandC is a byte that tells us how many fractional digits B and C have, each.
+Sometimes a zero had to be appended to B or C in order to have the same digits after the dot.
+
+Precision: unfortunately there is a few arcseconds (max. 30 I have seen so far, and it was for the Moon, the other planets have less) 
+difference compared to the results of the python version.
+To have better precision:
+- program the complicated versions of nutation and obliquity 
+- use QCELLs (see forth/quad.asm, but it is not finished)
+
+During testing it turned out that there was an overflow in case of the longitude of Mercury:
+subval*math.pow(T, i)  // this overflows in case of i=1 in ZFOS (subval is too big to be multiplied by T)
+To fix this, in SUMTERMS we truncate dSubVal to Q4 from Q6, also DVAL to Q4, and at the end of SUMTERMS the result back to Q6.
+
+In case there is still an overflow somewhere ( i.e. incorrect longitude), we can try to truncate dSubVal to Q2 an DVAL too.
+Testing it, shows that the results are the same as that of Q4 
+(at the end the algorithm divides the result by 10^8 to get the longitude or latitude).
+
+Sometimes JDE is off, that is why in case of a date-and-time e.g. the Moon's longitude is 1deg 30sec off!
+In these cases JD is correct, but calcDeltaT gives back wrong value, so JDE will be off, because JDE=JD+deltaT.
+It will be fixed.
+
+After loading pldata.txt and astro.txt, execute TEST to see Einstein's chart.
+
