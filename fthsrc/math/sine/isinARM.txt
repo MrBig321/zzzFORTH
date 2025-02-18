@@ -1,7 +1,3 @@
-( NOTE: Untested!!)
-( From the book Pyeatt, Ughetta-ARM 64-BIT ASSEMBLY LANGUAGE)
-( C-code: isinARM.c)
-
 ( This file provides functions for calculating sine and 
   cosine using fidex-point arithmetic.
   It uses the first nine terms in the Taylor series.)
