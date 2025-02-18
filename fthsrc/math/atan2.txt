@@ -9,52 +9,28 @@ DECIMAL
 
 ( C: fast_atan2f)
 : atan2  ( yQ6 xQ6  -- nQ6 )
-( CR ." *** ATAN2 *** .S=" .S KEY?)
    OVER ABS OVER ABS 
-( CR ." After ABS ABS .S=" .S KEY?)
    ( yQ6 xQ6 |yQ6| |xQ6| )
    2DUP MAX >R MIN S>D 
    10 6 POW R> M*/ 
    ( yQ6 xQ6 dAQ6 )
-( CR ." After dAQ6 .S=" .S KEY?)
    2DUP D>S DUP >R 10 6 POW M*/ D>S 
    ( yQ6 xQ6 sQ6 )   ( R: aQ6 )
-( CR ." After s=a*a .S=" .S KEY?)
    >R
    ( yQ6 xQ6 )   ( R: aQ6 sQ6 )
-( CR ." After s >R .S=" .S KEY?) 
    -464964749. ( dQ10) R@ 10 6 POW M*/ ( dQ10)
-( CR ." After -464964749.*s .S=" .S KEY?)
    1593142200. D+ R@ 10 6 POW M*/ ( dQ10) 
-( CR ." After [-464964749.*s+1593142200.]*s .S=" .S KEY?)
    3276227640. D- R> 10 6 POW M*/ ( dQ10)
-( CR ." After [[-464964749.*s+1593142200.]*s-3276227640.]*s .S=" .S KEY?)
    R@ 10 6 POW M*/ ( dQ10)
-( CR ." After [[-464964749.*s+1593142200.]*s-3276227640.]*s*a .S=" .S KEY?)
    R> S>D 10 4 POW 1 M*/ D+ 
    ( yQ6 xQ6 rdQ10 )  
-( CR ." ************After calculating r .S=" .S KEY?)
-( CR 2DUP ." r=" D. KEY?)
    2>R  ( yQ6 xQ6 )   ( R: rdQ10 )  
-( CR ." After r 2R> .S=" .S KEY?)
-   2DUP >R ABS R> ABS > IF 
-( CR ." In IF absy>absx" KEY?)
- 15707963700. 2R> D- 
-( CR 2DUP ." In IF absy>absx: r=" D. KEY?)
- 2>R THEN  
-( CR ." After abs[y] > abs[x] .S=" .S KEY?)
+   2DUP >R ABS R> ABS > IF 15707963700. 2R> D- 2>R THEN  
    ( yQ6 xQ6 )   ( R: rdQ10 )  
-   0< IF 
-( CR ." In IF [x<0]" KEY?)
- 31415927400. 2R> D- 
-( CR 2DUP ." In IF x<0: r=" D. KEY?)
- 2>R THEN 
-( CR ." After x<0 .S=" .S KEY?)
+   0< IF 31415927400. 2R> D- 2>R THEN 
    ( yQ6 )   ( R: rdQ10 )  
    2R> ROT 
-   0< IF DNEGATE 
-( CR ." In IF y<0 .S=" .S KEY?)
- THEN 
+   0< IF DNEGATE THEN 
    1 10 4 POW M*/ D>S ; 
 
 : ATAN2NEG  ( y x  -- n )
