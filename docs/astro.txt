@@ -23,6 +23,7 @@ Precision: unfortunately there is a few arcseconds (max. 30 I have seen so far, 
 difference compared to the results of the python version.
 To have better precision:
 - program the complicated versions of nutation and obliquity 
+- use Chebyshev polinoms for approximation (sine, ...)
 - use QCELLs (see forth/quad.asm, but it is not finished)
 
 During testing it turned out that there was an overflow in case of the longitude of Mercury:
@@ -33,9 +34,14 @@ In case there is still an overflow somewhere ( i.e. incorrect longitude), we can
 Testing it, shows that the results are the same as that of Q4 
 (at the end the algorithm divides the result by 10^8 to get the longitude or latitude).
 
-Sometimes JDE is off, that is why in case of a date-and-time e.g. the Moon's longitude is 1deg 30sec off!
-In these cases JD is correct, but calcDeltaT gives back wrong value, so JDE will be off, because JDE=JD+deltaT.
-It will be fixed.
+A problem: for July 1, 1951 JDE is different from a commercial software that uses a well known ephemeris.
+However both JD and deltaT seems to be correct (Meeus, python-code and ZFOS). 
+I have checked JD several ways (e.g. with a julian day calculator, Internet), 
+and deltaT comes from a table and its value is about 30 seconds.
+JD = 2433829.0  (ok: the commercial software, Meeus(python-code, ZFOS), JD-calculator-Internet)
+JDE = 2433829.0003 (Meeus(python-code, ZFOS))  vs  JDE = 2433829.125 (commercial software)
+This means that deltaT is different. I can't check the deltaT of the commercial software.
+JDE = JD+deltaT/86400 
 
 After loading pldata.txt and astro.txt, execute TEST to see Einstein's chart.
 
