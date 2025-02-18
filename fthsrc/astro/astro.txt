@@ -314,10 +314,6 @@ VARIABLE OBLIQUITY
 : TTOQ9  ( TdQ10 -- TQ9 )
    1 10 M*/NEG D>S ;
 
-( JDE=2442008.094252)
-( JDE=2442008.0942 truncated)
-( T=-0.26110625051334246)
-( T=-0.2611062505 truncated)
 : CALCNUTATIONSIMPL  ( JDEdQ4  -- deltaPsiQ6 deltaEpsilonQ6 )
    CALCTQ10   ( TDCellQ10 )
    12504452 S>D 100000 1 M*/NEG 
@@ -331,8 +327,6 @@ VARIABLE OBLIQUITY
    2SWAP    ( OmegaQ10 LQ10 TQ10 ) 
    2>R		( OmegaQ10 LQ10 )  ( R: TQ10 )
    2183165 S>D 1000000 1 M*/NEG 
-( 4812678813 overflows 32bit: D*/ !? OR: T fits in 32bits, if just Q9 !?)
-( OR: truncate 4812678813 to 481267881 !?)
    4812678813. 2R> TTOQ9 1000 M*/NEG D+
   ( DCELLs: OmegaQ10 LQ10 LmQ10 )  
   ( to Q6)
@@ -345,8 +339,6 @@ VARIABLE OBLIQUITY
    ( rOmegaQ6 rLQ6 rLmQ6 )  
    >R >R >R 
    ( )  ( R: rOmegaQ6 rLQ6 rLmQ6 )  
-( !!NOTE!! 2*rOmega28 overflows if rOmega28, i.e pow28)
-( !!Here test -17.20 and other constant to bitshift !!)
    R@ TOPOW28 SIN TOQ6 -1720 * 100 /
    ( c*sinROmega )  ( R: rLmQ6 rLQ6 rOmegaQ6 )  
    R@ 2* RNORMALIZE TOPOW28 SIN TOQ6 21 * 100 / 
@@ -366,9 +358,7 @@ VARIABLE OBLIQUITY
    2R> R@ ROT ROT 2>R 2* RNORMALIZE TOPOW28 COS TOQ6 10 * 100 / 
    ( c*sinROmega c*sin2*ROmega c*sin2*RL c*sin2*RLm )  ( R: rLmQ6 rLQ6 rOmegaQ6 )  
    + + +
-( nutInLon=18.208745 nuInObl=-0.108677 [in "]) 
    ( deltaPsi deltaEpsilon )  ( R: rLmQ6 rLQ6 rOmegaQ6 )  
-( CR ." deltaPsi, deltaEpsilon .S=" .S )
    2R> R> DROP 2DROP ;
 
 ( In order to calculate obliquity according to 
@@ -550,7 +540,6 @@ VARIABLE COSTILT
    S>D DEGREES D>S ;
 
 : CALCGEOCENTRICLAT  ( geolatQ6 dHQ6 -- rosingclatQ6 rocosclatQ6 )
-( CR ." *** CALCGEOCENTRICLAT *** .S=" .S KEY? )
    2>R RADIANS       ( rgeolat )   ( R: dHQ6 )
    6356755000000. 1 6378140 M*/ 2DUP 2>R
    2 PICK TOPOW28 TAN 1000000 M*/NEG D>S 1000000 ATAN2NEG 
@@ -562,9 +551,7 @@ VARIABLE COSTILT
   ( rgeolat ru rosingclat )   ( R: dHQ6 )
    SWAP TOPOW28 COS TOQ6 S>D
    2R> 5 ROLL TOPOW28 COS TOQ6 6378140 M*/NEG 1 10000000 M*/NEG
-   D+ D>S 
-  ( rosingclat rocosgclat )  
-   ;
+   D+ D>S ;
 
 : CALCH  ( ra -- H )
    SIDTIMELCLQ6 @ 15 * S>D NORMALIZE SWAP - S>D NORMALIZE ;
@@ -1269,10 +1256,9 @@ VARIABLE ASCQ6
    CR ."          " ." azi=" SWAP DMS .DMS ." alt=" DUP .HEMIS DMS .DMS ;
 
 : TEST  ( -- )
-   CR ."  Albert Einstein March 14, 1879 10:50 UT Ulm, Germany "
+   CR ." Albert Einstein March 14, 1879 10:50 UT Ulm, Germany "
    1879 3 14 10 10000 * 50 10000 * 60 / + ( no seconds)
    -99876 484011 100 CALCPARS PRINTPARS JDE 2@ CALCPLANETS PRINTPOS 
    CALCMC CALCASC PRINTASCMC ;
-
 
 
