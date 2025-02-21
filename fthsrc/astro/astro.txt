@@ -1,0 +1,1270 @@
+( Astronomical algorithms)
+( Fixed Point Decimal) 
+( Uses pldata.txt)
+
+: ASTRO2 ;   ( marker for FORGET)
+
+: 3DUP  ( a b c -- a b c a b c ) 
+   DUP 2OVER ROT ;
+
+: M*/NEG  ( d1 n1 +n2 -- d2 )
+   DUP 0< DUP >R IF NEGATE THEN M*/ R> IF DNEGATE THEN ;
+
+( ******************** MATH ******************** )
+
+: KEY?  ( -- )
+   KEYW DISCARD DROP ;
+
+HEX
+
+03243F6A8 CONSTANT PI 	( in hex: 3.141592651605606 * 2^28)
+01921FB54 CONSTANT PI/2
+06487ED51 CONSTANT 2PI
+
+CREATE SINCOEFFS 0AAAAAAAA , 044444445 , 097F97F97 , 05C778E96 , 09466EA60 , 05849184F , 094603063 , 0654B1DC1 , 
+
+DECIMAL 
+CREATE SINSHIFTS 0 C, 2 C, 6 C, 10 C, 15 C, 20 C, 26 C, 32 C, 
+8 CONSTANT SINSIZE 
+
+: DRSHIFTARI  ( d1 n -- d2 )
+   >R DUP 1 31 LSHIFT AND 0<> DUP >R IF DNEGATE THEN 2R@ DROP DRSHIFT 2R> NIP IF DNEGATE THEN ; 
+
+( It uses the first nine terms in the Taylor series.)
+( x: S[1,30]  0<=x<=pi/2)
+( y: S[3,28])
+( 32bitCurpower, 64bitXsq=x*x>>31[usedjustonce], 64bitSum=x<<31)
+: SINQ  ( x -- y )
+   DUP >R S>D 31 DLSHIFT R@ R@ M* 31 DRSHIFTARI R> 
+  ( sum xsq curpower[32bitx] )
+ SINSIZE 0 
+   DO 
+     >R 2DUP R> 1 M*/NEG 31 DRSHIFTARI D>S 
+     DUP SINCOEFFS I CELLS + @ M*  
+     2DUP D0< IF 1 M+ THEN SINSHIFTS I + C@ 
+     DUP 31 > IF 31 - DRSHIFTARI 31 THEN DRSHIFTARI 
+     ROT >R 2SWAP 2>R D+ 2R> R> 
+   LOOP DROP 2DROP 31 DRSHIFTARI 2 DRSHIFTARI D>S ;
+
+( Applies symmetries to reduce the range of 
+  the input, then calls SINQ and adjusts the result.)
+: SIN  ( x -- y )
+ ( do with MOD instead!? It is faster)
+   DUP 0< IF BEGIN 2PI +  DUP 0 >= UNTIL THEN 
+   DUP 2PI > IF BEGIN 2PI -  DUP 2PI <= UNTIL THEN 
+   DUP PI/2 <= IF 2 LSHIFT SINQ EXIT THEN 
+   DUP PI <= IF PI SWAP - 2 LSHIFT SINQ EXIT THEN 
+   DUP PI PI/2 + <= IF PI - 2 LSHIFT SINQ NEGATE EXIT THEN 
+   2PI SWAP - 2 LSHIFT SINQ NEGATE ; 
+
+( Applies the sin/cos relation to the input, then calls SIN)
+: COS  ( x -- y )
+   DUP 0 <= IF 2PI + THEN 
+   PI/2 SWAP - SIN ;
+
+: TAN  ( x -- y )
+   DUP SIN SWAP COS ?DUP 0<> 
+   IF >R S>D 1000000 R> M*/NEG D>S THEN ;
+
+: ATAN2  ( yQ6 xQ6  -- nQ6 )
+   OVER ABS OVER ABS  ( yQ6 xQ6 |yQ6| |xQ6| )
+   2DUP MAX >R MIN S>D 10 6 POW R> M*/NEG  ( yQ6 xQ6 dAQ6 )
+   2DUP D>S DUP >R 10 6 POW M*/NEG D>S  ( yQ6 xQ6 sQ6 )   ( R: aQ6 )
+   >R                                ( yQ6 xQ6 )   ( R: aQ6 sQ6 )
+   -464964749. ( dQ10) R@ 10 6 POW M*/NEG ( dQ10)
+   1593142200. D+ R@ 10 6 POW M*/NEG ( dQ10) 
+   3276227640. D- R> 10 6 POW M*/NEG ( dQ10)
+   R@ 10 6 POW M*/NEG ( dQ10)
+   R> S>D 10 4 POW 1 M*/NEG D+ 
+   ( yQ6 xQ6 rdQ10 )  
+   2>R  ( yQ6 xQ6 )   ( R: rdQ10 )  
+   2DUP >R ABS R> ABS > IF 15707963700. 2R> D- 2>R THEN  
+   ( yQ6 xQ6 )   ( R: rdQ10 )  
+   0< IF 31415927400. 2R> D- 2>R THEN 
+   ( yQ6 )   ( R: rdQ10 )  
+   2R> ROT 0< IF DNEGATE THEN 1 10 4 POW M*/NEG D>S ; 
+
+: ATAN2NEG  ( yQ6 xQ6  -- nQ6 )
+   DUP 0< DUP >R IF NEGATE THEN ATAN2 R> IF NEGATE THEN ;
+
+( Computes 16.16 square root)
+: ISQRT  ( n1 -- n2Q16bit )  ( *10^6 / 2^16 to have Q6 FixedPointDecimal)
+   DUP 0= IF EXIT THEN 
+   1073741824  ( 2^30)
+   0 >R  ( r b )  ( R: q )
+   DUP 0> 
+   IF 
+    ( r b )  ( R: q )
+     BEGIN
+       SWAP OVER R@ +  ( b r t )  ( R: q )
+       2DUP U>= 
+       IF
+         DUP >R -   ( b r )  ( R: q t )
+         OVER 2R> NIP + >R  ( b r )  ( R: q )
+       ELSE DROP
+       THEN 
+       2* SWAP 2/  ( r b )  ( R: q )
+       DUP 0= 
+     UNTIL 
+   THEN DROP R@ U> R> SWAP IF 1+ THEN ;
+
+: ASIN  ( xQ6 -- yQ6 )
+   DUP >R S>D 1000000. D+ 1000000 R@ - 10 6 POW M*/NEG 
+   D>S ISQRT S>D 10 3 POW 1 M*/NEG 16 DRSHIFT D>S R> SWAP ATAN2NEG ;
+
+: ACOS  ( xQ6 -- yQ6 )
+   DUP >R S>D 1000000. D+ 1000000 R@ - 10 6 POW M*/NEG 
+   D>S ISQRT S>D 10 3 POW 1 M*/NEG 16 DRSHIFT D>S R> ATAN2NEG ;
+
+( ******************** END OF MATH ******************** )
+
+DECIMAL 
+
+: KEY? KEYW DISCARD DROP ; ( for testing)
+
+( prints d with q fraction-digits)
+: .Q  ( d q -- ) 
+   >R TUCK DABS <# R> 0 DO # LOOP [CHAR] . HOLD #S ROT SIGN #> TYPE SPACE ;
+
+: DMS  ( nQ6 -- d m s )
+   ABS DUP >R 10 6 POW /                            ( d )  ( R: nQ6 )
+   DUP R> SWAP 10 6 POW * - 60 * DUP >R 10 6 POW /  ( d m )  ( R: p1 )
+   DUP R> SWAP 10 6 POW * - 60 * 10 6 POW / ;
+
+( prints no space after number, unlike dot )
+: .NOSP  ( n -- )
+   S>D <# #S #> TYPE ;
+
+( if n is only 1 digit, then prints a zero before the digit)
+: .DIGS2  ( n -- )
+   DUP 10 / 0= IF 48 EMIT THEN .NOSP ; 
+
+: .DMS  ( d m s -- )
+   >R >R .NOSP ." d " R> .DIGS2 ." m " R> .DIGS2 ." s " ;
+
+: .TIME  ( h m s -- )
+   >R >R .NOSP 58 EMIT R> .DIGS2 58 EMIT R> .DIGS2 ;
+
+: .HEMIS  ( nQ6 -- )
+   DUP 0<> IF 0> IF ." N " ELSE ." S " THEN ELSE DROP THEN ;
+
+0 CONSTANT HELIO
+1 CONSTANT GEO
+VARIABLE CENTER 
+GEO CENTER !
+
+1 CONSTANT FLNUTATION 
+2 CONSTANT FLPARALLAX 
+4 CONSTANT FLABERRATION 
+8 CONSTANT FLTRUENODE
+
+VARIABLE FLAGS
+( FLNUTATION FLPARALLAX FLABERRATION FLTRUENODE OR OR OR FLAGS ! )
+( FLNUTATION FLABERRATION FLPARALLAX OR OR FLAGS ! )
+FLNUTATION FLABERRATION OR FLAGS ! 
+
+VARIABLE CALGREG
+TRUE CALGREG !
+
+( Q4 means 4 decimal digits)
+( t is x.4 or: Q4)
+: CALCJD  ( y m d t -- jdDCELLQ4 )  
+   2>R DUP 2 <= 
+   IF 12 + SWAP 1- SWAP THEN 
+   2R> >R        ( Y M d )   ( R: t )
+   10000 * R>  ( D is x.4)
+   24 / +        ( Y M D )  
+   2 PICK 100 /  ( Y M D A )
+   CALGREG @ IF 2 OVER - SWAP 2/ 2/ + ELSE DROP 0 THEN 
+   ( Y M D B )
+   10 * 15245 - 1000 * + ( Y M D+B-1524.5 )
+   >R 1+ 306001 * 10000 / 
+   >R   ( Y )  ( R: D+B-1524.5 int[30.6001*[M+1]] )
+   4716 + S>D 3652500 10000 M*/NEG 10000 1 M*/NEG
+   R> 10000 * M+ R> M+ ;
+
+: ISLEAP  ( y -- flag )
+   CALGREG @ 
+   IF 
+     DUP >R 4 MOD 0= R@ 100 MOD 0<> AND R> 400 MOD 0= OR
+   ELSE 4 MOD 0= 
+   THEN ;
+
+: DAYOFTHEYEAR  ( y m d -- n )
+   ROT ISLEAP IF 1 ELSE 2 THEN 
+   ( m d k )
+   2 PICK 9 + 12 / * NEGATE + 30 - SWAP 275 * 9 / + ;  
+
+( Q1 table, i.e. there is a decimal-point, or in other words: multiplied by 10)
+( We could use "W," but there is no sign extension in _w_fetch in core.asm, 
+  so entering a negative value would be a positive integer after W@
+  The same is true in connection with "C," and C@
+  Maybe we should add SW@ and SC@ to have sign-extension)
+CREATE DTS 2490 , 2340 , 2190 , 2050 , 1910 , 1780 , 1650 , 1530 , 1420 , 
+  1310 , 1210 , 1120 , 1030 , 950 , 880 , 820 , 770 , 720 , 680 , 630 , 
+  600 , 560 , 530 , 510 , 480 , 460 , 440 , 420 , 400 , 380 , 350 , 330 , 
+  310 , 290 , 260 , 240 , 220 , 200 , 180 , 160 , 140 , 120 , 110 , 100 , 
+  90 , 80 , 70 , 70 , 70 , 70 , 70 , 70 , 80 , 80 , 90 , 90 , 90 , 90 , 
+  90 , 100 , 100 , 100 , 100 , 100 , 100 , 100 , 100 , 110 , 110 , 110 , 
+  110 , 110 , 120 , 120 , 120 , 120 , 130 , 130 , 130 , 140 , 140 , 140 , 
+  140 , 150 , 150 , 150 , 150 , 150 , 160 , 160 , 160 , 160 , 160 , 160 , 
+  160 , 160 , 150 , 150 , 140 , 130 , 131 , 125 , 122 , 120 , 120 , 120 , 
+  120 , 120 , 120 , 119 , 116 , 110 , 102 , 92 , 82 , 71 , 62 , 56 , 54 , 
+  53 , 54 , 56 , 59 , 62 , 65 , 68 , 71 , 73 , 75 , 76 , 77 , 73 , 62 , 
+  52 , 27 , 14 , -12 , -28 , -38 , -48 , -55 , -53 , -56 , -57 , -59 , 
+  -60 , -63 , -65 , -62 , -47 , -28 , -1 , 26 , 53 , 77 , 104 , 133 , 160 , 
+  182 , 202 , 211 , 224 , 235 , 238 , 243 , 240 , 239 , 239 , 237 , 240 , 
+  243 , 253 , 262 , 273 , 282 , 291 , 300 , 307 , 314 , 322 , 331 , 340 , 
+  350 , 365 , 383 , 402 , 422 , 445 , 465 , 485 , 505 , 522 , 538 , 549 , 
+  558 , 569 , 583 , 600 , 616 , 630 , 
+
+200 CONSTANT DTSSIZE
+10 CONSTANT DTSQ   ( there is one decimal point, so divide by 10)
+
+: CALCDELTAT  ( y m d -- deltaTInSeconds )
+   2 PICK >R DAYOFTHEYEAR           ( day )    ( R: y )
+   R@ ISLEAP IF 1 ELSE 0 THEN       ( day 0|1 )  ( R: y )
+( day 0|1 ) ( R: y )
+   365 + SWAP 10000 ROT */ R> 10000 * +     ( yQ4 )  
+   DUP 20000000 - 100 /             ( yQ4 tQ4 ) 
+   OVER 9480000 <                   ( yQ4 tQ4 flag ) 
+   IF NIP >R R@ DUP 10000 */ 441 * 10 / R@ 497 * 100 / 21770000 + 
+   ELSE OVER DUP 16000000 < SWAP 20000000 >= OR 
+  ( yQ4 tQ4 flag ) 
+     IF 
+       OVER DUP 20000000 >= SWAP 21000000 < AND 
+       IF SWAP 21000000 - 37 * 100 / ELSE 0 THEN   ( tQ4 corr )
+       OVER DUP 10000 */ 253 * 10 / +            ( tQ4 25.3*t^2+corr )
+       SWAP 102 * + 10000 / 102 + 
+     ELSE 
+       DROP 10000 / DUP 1600 - 2/    ( y idx )
+       SWAP 1600 - 2 MOD 0=
+      ( idx )
+       IF DTS SWAP CELLS + @ 
+       ELSE 
+         DUP DTSSIZE 1- <
+        ( y idx flag )
+         IF DTS OVER CELLS + @ SWAP 1+ CELLS DTS + @ + 2/ DTSQ / 
+         ELSE DTS OVER CELLS + @ 2* SWAP 1- CELLS + DTS + @ - DTSQ / 
+         THEN 
+       THEN 
+     THEN 
+   THEN ; 
+
+: NORMALIZE  ( dQ6 -- nQ6 )
+   360000000 SM/REM 
+   DROP DUP 0< IF 360000000 + THEN ;
+
+6283184 CONSTANT 2PIQ6
+3141592 CONSTANT PIQ6
+
+( Normalizes radian value)
+: RNORMALIZE  ( n1Q6 -- n2Q6 )
+   2PIQ6 MOD DUP 0< IF 2PIQ6 + THEN ;
+
+( Normalizes radian value)
+: RNORMALIZENEG  ( n1Q6 -- n2Q6 )
+   2PIQ6 MOD ;
+
+628318530 CONSTANT 2PIQ8
+314159265 CONSTANT PIQ8
+
+( Normalizes radian value)
+: RNORMALIZE2  ( d1Q8 -- d2Q8 )
+   2PIQ8 SM/REM DROP S>D ( D0< IF 2PIQ8 D+ THEN) ;
+
+( pi/180 Q10)
+174532925 CONSTANT TORAD 
+
+( 2^28)
+268435456 CONSTANT POW28 
+
+( 180/pi Q7)
+572957795 CONSTANT TODEG 
+
+( PI=843314856=0x03243F6A8 , 3.1415xxx*2^28)
+( 843314856/math.pow[2,28] = 3.141592651605606)
+( 2^28=268435456)
+( 843314856/[180*2^28]=0.017453292508920033)
+( 31415926516/1800000000000=0.017453292508888888)   ( piQ10/180Q10)
+( math.pi/180.0=0.017453292519943295)
+( Test:)
+( PI/3=281104952)
+( PI/3*TORAD=4.90620695045446e+16)
+( PI/3*TORAD/100000000000=4906206)  ( correct)
+
+: RADIANS  ( n1Q6 -- n2Q6 ) 
+   S>D TORAD 100000000 M*/NEG D>S 100 / ;
+
+: DEGREES  ( d1Q6 -- d2Q6 ) 
+   TODEG 10000000 M*/NEG ;
+
+ ( n * 2^28/10^6 to have 2^28 for trig-funcs)
+: TOPOW28  ( nQ6 -- n28 )
+   S>D POW28 1000000 M*/NEG D>S ;
+
+: TOQ6  ( n28 -- nQ6 )
+   S>D 1000000 POW28 M*/NEG D>S ;
+
+: DOSIN  ( n1Q6 -- n2Q6 )
+   TOPOW28 SIN TOQ6 ;
+
+: DOCOS  ( n1Q6 -- n2Q6 )
+   TOPOW28 COS TOQ6 ;
+
+VARIABLE NUTINLONQ6
+VARIABLE NUTINOBLQ6
+VARIABLE OBLIQUITYQ6
+
+: CALCTQ10  ( JDEdQ4 -- TdQ10 )
+   2451545 S>D 10000 1 M*/NEG D- 1000000 36525 M*/NEG ;  
+
+: TTOQ9  ( TdQ10 -- TQ9 )
+   1 10 M*/NEG D>S ;
+
+: CALCNUTATIONSIMPL  ( JDEdQ4  -- deltaPsiQ6 deltaEpsilonQ6 )
+   CALCTQ10   ( TDCellQ10 )
+   12504452 S>D 100000 1 M*/NEG 
+   2OVER 1934136261 1000000 M*/NEG D- 
+   ( TQ10 OmegaQ10 )  
+   2SWAP
+   ( OmegaQ10 TQ10 )  
+   2804665 S>D 1000000 1 M*/NEG 
+   2OVER 360007698 10000 M*/NEG D+ 
+   ( OmegaQ10 TQ10 LQ10 )  
+   2SWAP    ( OmegaQ10 LQ10 TQ10 ) 
+   2>R		( OmegaQ10 LQ10 )  ( R: TQ10 )
+   2183165 S>D 1000000 1 M*/NEG 
+   4812678813. 2R> TTOQ9 1000 M*/NEG D+
+  ( DCELLs: OmegaQ10 LQ10 LmQ10 )  
+  ( to Q6)
+   2>R 2>R 1 10000 M*/NEG 2R> 1 10000 M*/NEG 2R> 1 10000 M*/NEG 
+   ( OmegaQ6 LQ6 LmQ6 )  
+    2>R 2>R NORMALIZE 2R> NORMALIZE 2R> NORMALIZE 
+  ( singlecells)
+   ( OmegaNormQ6 LNormQ6 LmNormQ6 )  
+   >R >R RADIANS R> RADIANS R> RADIANS 
+   ( rOmegaQ6 rLQ6 rLmQ6 )  
+   >R >R >R 
+   ( )  ( R: rOmegaQ6 rLQ6 rLmQ6 )  
+   R@ DOSIN -1720 * 100 /
+   ( c*sinROmega )  ( R: rLmQ6 rLQ6 rOmegaQ6 )  
+   R@ 2* RNORMALIZE DOSIN 21 * 100 / 
+   ( c*sinROmega c*sin2*ROmega )  ( R: rLmQ6 rLQ6 rOmegaQ6 )  
+   2R@ DROP 2* RNORMALIZE DOSIN 132 * 100 / 
+   ( c*sinROmega c*sin2*ROmega c*sin2*RL )  ( R: rLmQ6 rLQ6 rOmegaQ6 )  
+   2R> R@ ROT ROT 2>R 2* RNORMALIZE DOSIN -23 * 100 / 
+   ( c*sinROmega c*sin2*ROmega c*sin2*RL c*sin2*RLm )  ( R: rLmQ6 rLQ6 rOmegaQ6 )  
+   + + +
+   ( deltaPsi )  ( R: rLmQ6 rLQ6 rOmegaQ6 )  
+   R@ DOCOS 920 * 100 /
+   ( c*cosROmega )  ( R: rLmQ6 rLQ6 rOmegaQ6 )  
+   R@ 2* RNORMALIZE DOCOS -9 * 100 / 
+   ( c*cosROmega c*cos2*ROmega )  ( R: rLmQ6 rLQ6 rOmegaQ6 )  
+   2R@ DROP 2* RNORMALIZE DOCOS 57 * 100 / 
+   ( c*cosROmega c*cos2*ROmega c*cos2*RL )  ( R: rLmQ6 rLQ6 rOmegaQ6 )  
+   2R> R@ ROT ROT 2>R 2* RNORMALIZE DOCOS 10 * 100 / 
+   ( c*sinROmega c*sin2*ROmega c*sin2*RL c*sin2*RLm )  ( R: rLmQ6 rLQ6 rOmegaQ6 )  
+   + + +
+   ( deltaPsi deltaEpsilon )  ( R: rLmQ6 rLQ6 rOmegaQ6 )  
+   2R> R> DROP 2DROP ;
+
+( In order to calculate obliquity according to 
+  the more accurate method, we would need QCell, 
+  a 128-bit value, because we have to add numbers like 
+  12.3456 and 0.00000000000000000000678 
+  We need to multiply 12.3456 by 10^20 then add 678, truncation!?)
+: CALCOBLECLSIMPL  ( JDEdQ4  -- ObliquityQ6 )
+   CALCTQ10 TTOQ9  >R  ( )            ( R: TQ9 )
+   -468150. R@ 10 M*/NEG       ( v1DQ6*10^5 ) ( R: TQ9 )
+   R@ S>D R@ 100000000 M*/NEG -59 1000 M*/NEG     ( v1DQ6 v2DQ6 ) ( R: TQ9 )
+   R@ S>D R@ 100000000 M*/NEG R> 100000000 M*/NEG 1 10 M*/NEG 1813 10000 M*/NEG  
+   ( v1DQ6 v2DQ6 v3DQ6 ) 
+   D+ D+ 1 1000000 M*/NEG         ( VDQ6 )  
+   84381448000. D+  
+   ( epsilon0Q6 ) 
+   FLAGS @ FLNUTATION AND 0<> 
+   IF NUTINOBLQ6 @ S>D D+ THEN 
+   1 3600 M*/NEG D>S ;
+
+: GBYTE  ( addr -- n addr+1 )
+   DUP C@ SWAP 1+ ;
+
+: GCELL  ( addr -- n addr+CELL )
+   DUP @ SWAP CELL+ ;
+
+: GDCELL  ( addr -- d addr+DCELL )
+   GCELL GCELL ;
+
+( gets data of a row of the given array, e.g. EARTHL1)
+: GROW  ( addrRow -- dA dB dC bQ addrNextRow )
+   GDCELL GCELL >R S>D R> GDCELL GBYTE ;
+
+: PRROW  ( dA dB dC bQ -- )
+   CR >R 2>R 2>R 2DUP D. 2R> 2DUP D. 2R> 2DUP D. R> DUP . ;
+
+: SCALETOQ  ( d toQ currQ -- dScaled offsQ )
+   - DUP DUP >R 0<>   ( d toQ-currQ flag ) ( R: offsQ )
+   IF   
+     DUP 0> 
+     IF 10 SWAP POW 1 ELSE NEGATE 1 10 ROT POW THEN M*/NEG 
+   ELSE DROP 
+   THEN R> ;
+
+: CTERM  ( T dA dB dC bQ -- dTerm )
+   >R DUP 0<> IF 1 100 M*/NEG 2 ELSE 0 THEN >R  ( R: bQ 0|2 ) ( 0|2 is for C) 
+   6 ROLL >R  ( dA dB dC )  ( R: bQ 0|2 T )
+   2DUP D0= INVERT R> SWAP 
+   IF 
+    ( 10 is T's decimals !?)
+    10 2R@ - 10 + 8 - POW M*/NEG ( 8 decimals)
+   ( dA dB dC*T )  ( R: bQ 0|2 )
+     R> DROP 
+    ( here we scale B before addition, and drop R:bQ, we know it is 8)
+     8 R> 2SWAP 2>R SCALETOQ DROP 2R>   ( dA dB dC*T[Q8] )  ( R: )
+     D+ 
+   ELSE DROP 2DROP 8 2R> DROP SCALETOQ DROP   ( dA dB )  ( R: )
+   THEN 
+  ( dA [B+C*T][dQ8] )  ( R: )
+   2DUP D0= INVERT
+   IF 
+     RNORMALIZE2 1 100 M*/NEG D>S   ( dA B+C*T[SQ6] )  ( R: )
+     DOCOS 
+    ( dA cos[B+C*T[SQ6]] )  ( R: )
+     1 M*/NEG 
+   ELSE 2DROP 1000000 1 M*/NEG 
+   THEN ( dTermQ6 ) ; 
+
+2VARIABLE DSUBVAL
+
+: GARR  ( T addrArr rowCnt -- dSubVal )
+   0. DSUBVAL 2!
+   0 DO 
+      >R DUP R> 
+      GROW     ( T T dA dB dC bQ addrNextRow )
+      >R CTERM DSUBVAL 2@ D+ DSUBVAL 2! R> 
+     ( T addrNextRow )
+     LOOP 2DROP DSUBVAL 2@ ;
+
+: TPOW  ( T i -- TpowQ9 )
+   DUP 1 >
+   IF 
+     >R DUP >R S>D R> R> 1- ( dT T i-1 )
+     0 DO DUP >R 100000000 M*/NEG 1 100 M*/NEG R> LOOP DROP D>S 
+   ELSE DUP 0= IF 2DROP 1 ELSE DROP THEN 
+   THEN ;
+
+2VARIABLE DVALQ4
+
+( During testing it turned out that there was an overflow in case of the longitude of Mercury:
+  subval*math.pow[T, i]  ; this overflows in case of i=1 in ZFOS [subval is too big to be multiplied by T])
+( To fix this, we truncate dSubVal to Q4 from Q6, also DVAL to Q4, and at the end of SUMTERMS the result back to Q6) 
+: SUMTERMS  ( T addrArrs addrLens cnt -- dVal )
+   0. DVALQ4 2! 0 
+   DO 
+     2DUP @ SWAP @ SWAP  ( T addrArrs addrLens EarthLX rowCntX )
+     2>R 2 PICK 2R>      ( T addrArrs addrLens T EarthLX rowCntX )
+     GARR                ( T addrArrs addrLens dSubVal )
+  ( to Q4)  1 100 M*/NEG 
+     4 PICK I TPOW 
+     DUP 1 <> 
+     IF 100000000 M*/NEG I 0> IF 1 100 M*/NEG THEN ELSE DROP THEN 
+     DVALQ4 2@ D+ DVALQ4 2!  
+     CELL+ SWAP CELL+ SWAP 
+   LOOP 2DROP DROP DVALQ4 2@ ( back to Q6) 100 1 M*/NEG ;
+
+: SUNTOGEO  ( L0 B0 -- L B )
+    NEGATE SWAP S>D 180000000. D+ NORMALIZE SWAP ;
+
+: ANGLE  ( xQ6 yQ6 -- aQ6 )
+   DUP >R    ( x y )  ( R: y )
+   OVER 0<> 
+   IF        ( x y )  ( R: y )
+     DUP 0<>
+     IF 
+       SWAP ATAN2NEG 
+     ELSE 
+       DROP 0< IF PIQ6 ELSE 0 THEN 
+     THEN 
+   ELSE 
+     NIP 0< IF PIQ6 NEGATE 2/ ELSE PIQ6 2/ THEN 
+   THEN 
+   DUP 0< IF PIQ6 + THEN 
+   R> 0< IF PIQ6 + THEN ;
+
+( Position: lon, lat, alt)
+VARIABLE GEOLONQ4
+VARIABLE GEOLATQ4
+VARIABLE GEOALT
+
+VARIABLE SIDTIMEQ6
+VARIABLE SIDTIMELCLQ6
+
+VARIABLE SINALT
+VARIABLE COSALT
+VARIABLE SINAZI
+VARIABLE COSAZI
+VARIABLE SINTILT
+VARIABLE COSTILT
+
+: TRANSFORM  ( xQ6 yQ6 tiltQ6 -- x2Q6 y2Q6 )
+   >R >R RADIANS R> RADIANS R> RADIANS  ( rlon rlat rtilt )
+   DUP DOSIN SINTILT !
+   DOCOS COSTILT !
+   DUP DOSIN SINALT !
+   DOCOS COSALT !
+   DUP DOSIN SINAZI !
+   DOCOS COSAZI !
+   COSALT @ S>D SINAZI @ 1000000 M*/NEG COSTILT @ 1000000 M*/NEG D>S  ( x )
+   SINALT @ S>D SINTILT @ 1000000 M*/NEG D>S  ( x y ) - ( x-y )
+   COSALT @ S>D COSAZI @ 1000000 M*/NEG D>S  ( x y )
+   SWAP ANGLE   ( l1 )
+   S>D DEGREES D>S
+   COSALT @ S>D SINAZI @ 1000000 M*/NEG SINTILT @ 1000000 M*/NEG 
+   SINALT @ S>D COSTILT @ 1000000 M*/NEG D+ D>S ASIN 
+   S>D DEGREES D>S ;
+
+: CALCGEOCENTRICLAT  ( geolatQ6 dHQ6 -- rosingclatQ6 rocosclatQ6 )
+   2>R RADIANS       ( rgeolat )   ( R: dHQ6 )
+   6356755000000. 1 6378140 M*/ 2DUP 2>R
+   2 PICK TOPOW28 TAN 1000000 M*/NEG D>S 1000000 ATAN2NEG 
+  ( rgeolat ru )   ( R: dHQ6 d[b/a] )
+   2R> 2 PICK DOSIN 1000000 M*/NEG 
+  ( rgeolat ru d[b/a*sin[ru]] )   ( R: dHQ6 )
+   2R@ 5 PICK DOSIN 6378140 M*/NEG 1 10000000 M*/NEG
+   D+ D>S
+  ( rgeolat ru rosingclat )   ( R: dHQ6 )
+   SWAP DOCOS S>D
+   2R> 5 ROLL DOCOS 6378140 M*/NEG 1 10000000 M*/NEG
+   D+ D>S ;
+
+: CALCH  ( ra -- H )
+   SIDTIMELCLQ6 @ 15 * S>D NORMALIZE SWAP - S>D NORMALIZE ;
+
+: CNOMIN1  ( rocosgclat rpi rH -- nomin ) 
+   >R >R NEGATE S>D R> DOSIN 1000000 M*/NEG 
+   R> DOSIN 1000000 M*/NEG D>S ;
+
+: CDENOMIN1  ( rdecl rocosingclat rpi rH -- denomin )
+   >R >R >R DOCOS S>D 
+   R> S>D DNEGATE         
+   R> DOSIN 1000000 M*/NEG 
+   R> DOCOS 1000000 M*/NEG 
+   D+ D>S ;
+
+: CDRA  ( nomin denomin -- dRA )
+   DUP 0<> IF ATAN2NEG ELSE NIP THEN ;
+
+: CNOMIN2  ( rdecl rosingclat rpi dRA -- nomin )
+   >R >R >R DOSIN S>D 
+   R> NEGATE S>D 
+   R> DOSIN 1000000 M*/NEG 
+   R> DOCOS 1000000 M*/NEG 
+   D+ D>S ;
+
+: CDECL  ( nomin denomin -- decl )
+   DUP 0<> IF ATAN2NEG ELSE NIP THEN S>D DEGREES D>S ;
+
+: CALCPARALLAX  ( lonQ6 latQ6 piQ6 -- raQ6 declQ6 )
+   >R OBLIQUITYQ6 @ TRANSFORM    ( ra decl )  ( R: pi )
+   RADIANS OVER CALCH 
+   RADIANS R> RADIANS   ( ra rdecl rH rpi )  ( R: )
+   GEOLATQ4 @ 100 * GEOALT @ S>D 10000000 1 M*/ CALCGEOCENTRICLAT
+  ( ra rdecl rH rpi rosingclatQ6 rocosgclatQ6 )  ( R: )
+   DUP 3 PICK 5 PICK CNOMIN1 
+   5 PICK ROT 4 PICK 6 ROLL CDENOMIN1 
+  ( ra rdecl rpi rosingclatQ6 nominator denomin )  ( R: )
+   DUP >R
+  ( ra rdecl rpi rosingclatQ6 nominator denomin )  ( R: denomin )
+   CDRA 
+  ( ra rdecl rpi rosingclatQ6 dra )  ( R: denomin )
+   3 ROLL ROT 3 ROLL 3 PICK CNOMIN2 
+  ( ra dRA nomin2 )  ( R: denomin )
+   R>
+  ( ra dRA nomin2 denomin )  ( R: )
+   CDECL
+  ( ra dRA decl )  ( R: )
+   >R S>D DEGREES D>S + S>D NORMALIZE R> ;
+
+: PLPARALLAX  ( L B R -- Lp Bp R )
+   >R 8794000 RADIANS DOSIN 
+   S>D 1000000 R@ M*/NEG D>S ASIN               
+   S>D DEGREES D>S CALCPARALLAX
+   OBLIQUITYQ6 @ NEGATE TRANSFORM R> ;
+
+: B16TOQ6  ( n16 -- nQ6 )
+   S>D 1000 1 16 LSHIFT M*/NEG D>S ;
+
+ VARIABLE RL0Q6 
+ VARIABLE RB0Q6 
+ VARIABLE RR0Q6 
+ VARIABLE R0Q6 
+ VARIABLE RLQ6 
+ VARIABLE RBQ6 
+ VARIABLE RRQ6 
+ VARIABLE RQ6 
+
+( L0, B0, R0 coords of the Earth [heliocentric], L, B, R coords of the body to transform. If R0 is negative then toHelio)
+: TOGEO  ( L B R L0 B0 R0 -- Lout Bout Rout )
+   DUP R0Q6 ! RADIANS RR0Q6 ! RADIANS RB0Q6 ! RADIANS RL0Q6 ! 
+   DUP RQ6 ! RADIANS RRQ6 ! RADIANS RBQ6 ! RADIANS RLQ6 ! 
+   RBQ6 @ DOCOS S>D 
+   RLQ6 @ DOCOS 10 6 POW M*/NEG 
+   RQ6 @ 10 6 POW M*/NEG 
+   RB0Q6 @ DOCOS S>D 
+   RL0Q6 @ DOCOS 10 6 POW M*/NEG 
+   R0Q6 @ 10 6 POW M*/NEG 
+   D- D>S ( x )
+   RBQ6 @ DOCOS S>D 
+   RLQ6 @ DOSIN 10 6 POW M*/NEG 
+   RQ6 @ 10 6 POW M*/NEG 
+   RB0Q6 @ DOCOS S>D 
+   RL0Q6 @ DOSIN 10 6 POW M*/NEG 
+   R0Q6 @ 10 6 POW M*/NEG 
+   D- D>S ( x y )
+   RBQ6 @ DOSIN S>D 
+   RQ6 @ 10 6 POW M*/NEG 
+   RB0Q6 @ DOSIN S>D 
+   R0Q6 @ 10 6 POW M*/NEG 
+   D- D>S ( x y z )
+   >R           ( x y )  ( R: z )
+   2DUP SWAP ATAN2 S>D DEGREES NORMALIZE 
+   ( x y L )  ( R: z )
+   ROT ROT    
+   ( L x y )  ( R: z )
+   >R DUP >R 
+   ( L x )  ( R: z y x )
+   S>D R> 10 6 POW M*/NEG 
+   ( L x^2 )  ( R: z y )
+   R@ S>D R> 10 6 POW M*/NEG D+ 
+   ( L x^2+y^2 )  ( R: z )
+   2DUP  
+   ( L x^2+y^2 x^2+y^2 )  ( R: z )
+   D>S ISQRT B16TOQ6 
+  R@ SWAP ATAN2 S>D DEGREES 
+   ( L x^2+y^2 dB )  ( R: z )
+   2SWAP 
+   ( L dB x^2+y^2 )  ( R: z )
+   R@ S>D R> 10 6 POW M*/NEG D+ 
+   ( L dB x^2+y^2+z^2 )  ( R: )
+   D>S ISQRT B16TOQ6   
+   >R D>S R> ;
+
+VARIABLE PLARRL 
+VARIABLE PLARRLLEN 
+VARIABLE PLARRLCNT 
+VARIABLE PLARRB 
+VARIABLE PLARRBLEN 
+VARIABLE PLARRBCNT 
+VARIABLE PLARRR 
+VARIABLE PLARRRLEN 
+VARIABLE PLARRRCNT 
+
+: CALCL  ( JDEdQ4 -- L0Q6 )
+   CALCTQ10 TTOQ9 PLARRL @ PLARRLLEN @ PLARRLCNT @ SUMTERMS 
+   1 10 8 POW M*/NEG ( valL/10^8 )
+   DEGREES  ( dQ6 ) NORMALIZE  ( Q6 ) ;
+
+: CALCB  ( JDEdQ4 -- B0Q6 )
+   CALCTQ10 TTOQ9 PLARRB @ PLARRBLEN @ PLARRBCNT @ SUMTERMS 
+   1 10 8 POW M*/NEG ( valL/10^8 ) DEGREES  ( dQ6 ) D>S ;
+
+: CALCR  ( JDEdQ4 -- R0Q6 )
+   CALCTQ10 TTOQ9 PLARRR @ PLARRRLEN @ PLARRRCNT @ SUMTERMS 
+   1 10 8 POW M*/NEG ( valL/10^8 ) D>S ;
+
+( Heliocentric)
+VARIABLE SUNL0Q6  ( longitude)
+VARIABLE SUNB0Q6  ( latitude)
+VARIABLE SUNR0Q6  ( radius)
+( Geocentric)
+VARIABLE SUNLQ6  
+VARIABLE SUNBQ6  
+VARIABLE SUNRQ6  
+
+VARIABLE ISSUN
+
+: CALCPLANET  ( JDEdQ4 -- L0Q6 B0Q6 R0Q6 LQ6 BQ6 RQ6 )
+   2DUP 2>R CALCL 2R@ CALCB 2R> CALCR 
+  ( L0Q6 B0Q6 R0Q6 )
+   CENTER @ GEO = 
+   IF 
+     ISSUN @
+     IF DUP >R 0 2OVER ROT DROP SUNTOGEO R> 
+     ELSE 3DUP SUNL0Q6 @ SUNB0Q6 @ SUNR0Q6 @ TOGEO 
+     THEN 
+    ( L0Q6 B0Q6 R0Q6 LQ6 BQ6 RQ6 )
+     2>R
+     FLAGS @ FLNUTATION AND 0<> 
+     IF >R NUTINLONQ6 @ 3600 / R> + 
+     THEN 
+     FLAGS @ FLABERRATION AND 0<> 
+     IF >R DUP >R -20489800000000. 1 R> M*/NEG D>S
+        3600 / R> + 
+     THEN 
+     S>D NORMALIZE 2R> 
+    ( L0Q6 B0Q6 R0Q6 LQ6 BQ6 RQ6 )
+   ELSE 3DUP
+   THEN ;
+
+( Heliocentric)
+VARIABLE MERCURYL0Q6  ( longitude)
+VARIABLE MERCURYB0Q6  ( latitude)
+VARIABLE MERCURYR0Q6  ( radius)
+( Geocentric)
+VARIABLE MERCURYLQ6  
+VARIABLE MERCURYBQ6  
+VARIABLE MERCURYRQ6  
+
+( Heliocentric)
+VARIABLE VENUSL0Q6  ( longitude)
+VARIABLE VENUSB0Q6  ( latitude)
+VARIABLE VENUSR0Q6  ( radius)
+( Geocentric)
+VARIABLE VENUSLQ6  
+VARIABLE VENUSBQ6  
+VARIABLE VENUSRQ6  
+
+( Heliocentric)
+VARIABLE MARSL0Q6  ( longitude)
+VARIABLE MARSB0Q6  ( latitude)
+VARIABLE MARSR0Q6  ( radius)
+( Geocentric)
+VARIABLE MARSLQ6  
+VARIABLE MARSBQ6  
+VARIABLE MARSRQ6  
+
+( Heliocentric)
+VARIABLE JUPITERL0Q6  ( longitude)
+VARIABLE JUPITERB0Q6  ( latitude)
+VARIABLE JUPITERR0Q6  ( radius)
+( Geocentric)
+VARIABLE JUPITERLQ6  
+VARIABLE JUPITERBQ6  
+VARIABLE JUPITERRQ6  
+
+( Heliocentric)
+VARIABLE SATURNL0Q6  ( longitude)
+VARIABLE SATURNB0Q6  ( latitude)
+VARIABLE SATURNR0Q6  ( radius)
+( Geocentric)
+VARIABLE SATURNLQ6  
+VARIABLE SATURNBQ6  
+VARIABLE SATURNRQ6  
+
+( ******************** MOON ******************** )
+
+VARIABLE MOONLQ6  
+VARIABLE MOONBQ6  
+VARIABLE MOONRQ6  
+
+VARIABLE MOONLCQ6
+VARIABLE MOONDQ6
+VARIABLE MOONMQ6
+VARIABLE MOONMCQ6
+VARIABLE MOONFQ6
+VARIABLE MOONA1Q6
+VARIABLE MOONA2Q6
+VARIABLE MOONA3Q6
+VARIABLE MOONEQ6
+2VARIABLE MOONDSUMLQ6
+2VARIABLE MOONDSUMRQ6
+2VARIABLE MOONDSUMBQ6
+
+: MOONINITSUMS  ( -- )
+   0. MOONDSUMLQ6 2! 0. MOONDSUMRQ6 2! 0. MOONDSUMBQ6 2! ;
+
+: GMOONLROW  ( addr -- D M MC F CS CC addrNR )
+   DUP @ SWAP CELL+ DUP @ SWAP CELL+ DUP @ SWAP CELL+
+   DUP @ SWAP CELL+ DUP @ SWAP CELL+ DUP @ SWAP CELL+ ;
+
+: GMOONBROW  ( addr -- D M MC F CS addrNR )
+   DUP @ SWAP CELL+ DUP @ SWAP CELL+ DUP @ SWAP CELL+
+   DUP @ SWAP CELL+ DUP @ SWAP CELL+ ;
+
+: GMOONCORR  ( MNum -- corr )
+     >R 1000000 R@ DUP 1 = SWAP -1 = OR IF DROP MOONEQ6 @ THEN 
+     R> DUP 2 = SWAP -2 = OR 
+     IF DROP MOONEQ6 @ S>D MOONEQ6 @ 1000000 M*/NEG D>S THEN ;
+
+: CMOONPAR  ( d1 d2 d3 flagDivBy10 T -- nQ6 )
+   2>R R@ 1000000000 M*/NEG 2R> >R IF 1 10 M*/NEG THEN D+  
+   2SWAP R@ 1000000000 M*/NEG R> 1000000000 M*/NEG D+  
+   1 10 M*/NEG  ( to Q6) NORMALIZE ;
+
+: CMOONPARS  ( T -- )
+   >R -15786. 2183164477. 48126788123421. TRUE R@ CMOONPAR MOONLCQ6 !
+   -18819. 2978501921. 4452671114034. FALSE R@ CMOONPAR MOONDQ6 ! 
+   -1536. 3575291092. 359990502909. FALSE R@ CMOONPAR MOONMQ6 ! 
+   87414. 1349633964. 4771988675055. FALSE R@ CMOONPAR MOONMCQ6 ! 
+   -36539. 932720950. 4832020175233. FALSE R> CMOONPAR MOONFQ6 ! ;
+
+: CMOONPAR2  ( d1 d2 T -- nQ6 )
+   1000000000 M*/NEG D+ NORMALIZE ;
+
+: CMOONPARS2  ( T -- )
+   >R 119750000. 131849000. R@ CMOONPAR2 MOONA1Q6 ! 
+   53090000. 479264290000. R@ CMOONPAR2 MOONA2Q6 ! 
+   313450000. 481266484000. R> CMOONPAR2 MOONA3Q6 ! ;
+
+: CMOONE  ( T -- )
+   >R 10000000. 25160. R@ 1000000000 M*/NEG D+ 
+   -74. R@ 1000000000 M*/NEG R> 1000000000 M*/NEG D+ 
+   1 10 M*/NEG  ( to Q6) D>S MOONEQ6 ! ;
+
+: CMOONLR  ( -- )
+   MOONLR MOONLRLEN 0 
+   DO
+    ( addrNR )
+     GMOONLROW >R  ( DNum MNum McNum FNum CS CC )  ( R: addrNR )
+     4 PICK GMOONCORR  
+    ( DNum MNum McNum FNum CS CC corr )   ( R: addrNR )
+    >R 2>R
+    ( DNum MNum McNum FNum )   ( R: addrNR corr CS CC )
+   ( calculate the radians, because it is the same for both sin and cos)
+     MOONFQ6 @ * SWAP MOONMCQ6 @ * + SWAP MOONMQ6 @ * + SWAP MOONDQ6 @ * + 
+     RADIANS RNORMALIZE
+    ( radian )   ( R: addrNR corr CS CC )
+     2R>  
+    ( radian CS CC )   ( R: addrNR corr )
+     2 PICK DOCOS S>D R@ 1000000 M*/NEG 
+     2 ROLL 1 M*/NEG MOONDSUMRQ6 2@ D+ MOONDSUMRQ6 2!
+    ( radian CS )   ( R: addrNR corr )
+     SWAP DOSIN S>D R> 1000000 M*/NEG 
+     ROT 1 M*/NEG MOONDSUMLQ6 2@ D+ MOONDSUMLQ6 2!
+    ( )   ( R: addrNR )
+     R> ( addrNR )  ( R: )
+   LOOP DROP ;
+
+: CMOONB  ( -- )
+   MOONB MOONBLEN 0 
+   DO
+    ( addrNR )
+     GMOONBROW >R  ( DNum MNum McNum FNum CS )  ( R: addrNR )
+     3 PICK GMOONCORR  
+    ( DNum MNum McNum FNum CS corr )   ( R: addrNR )
+     2>R 
+    ( DNum MNum McNum FNum )   ( R: addrNR CS corr )
+     MOONFQ6 @ * SWAP MOONMCQ6 @ * + SWAP MOONMQ6 @ * + SWAP MOONDQ6 @ * + 
+     RADIANS RNORMALIZE
+    ( radian )   ( R: addrNR CS corr )
+     DOSIN S>D R> 1000000 M*/NEG 
+    ( corr*sin[radian] )   ( R: addrNR CS )
+     R> 1 M*/NEG 
+    ( CS*corr*sin[radian] )   ( R: addrNR )
+     MOONDSUMBQ6 2@ D+ MOONDSUMBQ6 2!
+     R>  ( addrNR )   ( R: )
+   LOOP DROP ;
+
+: CMOONSUMLUPD  ( -- d )
+   3958. MOONA1Q6 @ RADIANS RNORMALIZE 
+   DOSIN 1 M*/NEG 
+   1962. MOONLCQ6 @ MOONFQ6 @ - RADIANS RNORMALIZE 
+   DOSIN 1 M*/NEG D+
+   318. MOONA2Q6 @ RADIANS RNORMALIZE 
+   DOSIN 1 M*/NEG D+ ;
+
+: CMOONSUMBUPD  ( -- d )
+   -2235. MOONLCQ6 @ RADIANS RNORMALIZE 
+   DOSIN 1 M*/NEG 
+   382. MOONA3Q6 @ RADIANS RNORMALIZE 
+   DOSIN 1 M*/NEG D+
+   175. MOONA1Q6 @ MOONFQ6 @ - RADIANS RNORMALIZE 
+   DOSIN 1 M*/NEG D+
+   175. MOONA1Q6 @ MOONFQ6 @ + RADIANS RNORMALIZE 
+   DOSIN 1 M*/NEG D+
+   127. MOONLCQ6 @ MOONMCQ6 @ - RADIANS RNORMALIZE 
+   DOSIN 1 M*/NEG D+
+   -115. MOONLCQ6 @ MOONMCQ6 @ + RADIANS RNORMALIZE 
+   DOSIN 1 M*/NEG D+ ;
+
+: CHELIOMOON  ( lon lat dDist -- L B R )
+   1 149600000 M*/NEG D>S 10 / ( to Q6)
+   SUNL0Q6 @ SUNB0Q6 @ SUNR0Q6 @ NEGATE TOGEO ;
+
+: ADJGEOMOON  ( lon lat dDist -- lonAdj latAdj dist )
+   FLAGS @ FLNUTATION AND 0<>
+   IF 2>R >R NUTINLONQ6 @ 3600 / + R> 2R> THEN
+   1 1000 M*/NEG D>S  ( truncate dDist to fit in a cell)
+   FLAGS @ FLPARALLAX AND 0<>
+   IF 
+     >R 6378140000000. 1 R@ M*/NEG D>S ( lon lat 6378.14/dist ) ( R: dist )
+     ASIN                        ( lon lat asin[6378.14/dist] ) ( R: dist )
+     S>D DEGREES D>S
+     CALCPARALLAX
+     OBLIQUITYQ6 @ NEGATE TRANSFORM 
+     R>
+   THEN ;
+
+( The terms with T^3 or T^4 are not used, they would be Q8 and Q11, 
+  the first non-zero digit would be at the 8th decimal place 
+  in case of Q8, and at the 11th in case of Q11 !?)
+: CALCMOON  ( JDEdQ4 -- LQ6 BQ6 RQ6 )
+   MOONINITSUMS CALCTQ10 TTOQ9 >R R@ CMOONPARS R@ CMOONPARS2 R> CMOONE 
+   CMOONLR CMOONB CMOONSUMLUPD MOONDSUMLQ6 2@ D+ MOONDSUMLQ6 2!
+   CMOONSUMBUPD MOONDSUMBQ6 2@ D+ MOONDSUMBQ6 2!
+   MOONDSUMLQ6 2@ 1 1000000 M*/NEG D>S MOONLCQ6 @ + 
+   MOONDSUMBQ6 2@ 1 1000000 M*/NEG D>S  
+   MOONDSUMRQ6 2@ 1 1000 M*/NEG 385000560000. D+ 
+   CENTER @ HELIO =
+   IF CHELIOMOON ELSE ADJGEOMOON THEN ;
+
+VARIABLE NODELQ6  
+
+: CTRUENODE  ( dMeanNode -- trueNodeQ6 )
+   -1497900. MOONDQ6 @ MOONFQ6 @ - 2* RADIANS RNORMALIZE 
+     DOSIN 1000000 M*/NEG D+
+   -150000. MOONMQ6 @ RADIANS RNORMALIZE 
+     DOSIN 1000000 M*/NEG D+ 
+   -122600. MOONDQ6 @ 2* RADIANS RNORMALIZE 
+     DOSIN 1000000 M*/NEG D+ 
+   -117600. MOONFQ6 @ 2* RADIANS RNORMALIZE 
+     DOSIN 1000000 M*/NEG D+ 
+   -80100. MOONMCQ6 @ MOONFQ6 @ - 2* RADIANS RNORMALIZE 
+     DOSIN 1000000 M*/NEG D+ NORMALIZE ;
+
+: CALCNODE  ( JDEdQ4 -- lonQ6 )
+   CALCTQ10 TTOQ9 >R  
+   20754. 1250445479. -19341362891. FALSE R@ CMOONPAR  ( meanNode )
+   R> CMOONPARS   ( meanNode )
+   FLAGS @ FLTRUENODE AND 0<> 
+   IF S>D CTRUENODE THEN ;
+
+( ******************** End of MOON ******************** )
+
+: CALCSIDTIME  ( JDdQ4 -- )
+   2DUP CALCTQ10 TTOQ9 >R 2>R     ( )  ( R: T JDdQ4 ) 
+   28046061837. 36098564736629. 2R> 24515450000. D- D>S 
+   10000000 M*/NEG  ( Q8 )  ( R: T )
+   D+ 
+   R@ S>D R> 100000000 M*/NEG 38793 1000000000 M*/NEG 1 10 M*/NEG  ( dQ8 ) ( R: )
+   D+ ( th0dQ8 ) ( R: )
+   FLAGS @ FLNUTATION AND 0<> 
+   IF 
+     OBLIQUITYQ6 @ S>D 3600 1 M*/NEG ( th0dQ8 dQ6 ) 
+     NORMALIZE  ( th0dQ8 nQ6 )
+     RADIANS  ( th0dQ8 nQ6 )
+     DOCOS  ( th0dQ8 nQ6 )
+     S>D NUTINLONQ6 @ 10000 M*/NEG 1 15 M*/NEG ( th0dQ8 corrdQ8 )
+     1 3600 M*/NEG 
+     D+    ( th0dQ8 )
+   THEN
+   1 100 M*/NEG   ( th0dQ6 )
+   NORMALIZE   ( th0Q6 )
+   15 / SIDTIMEQ6 ! ;
+
+( Position: lon, lat, alt)
+VARIABLE GEOLONQ4
+VARIABLE GEOLATQ4
+VARIABLE GEOALT
+
+: CALCLOCALSIDTIME  ( -- )
+   SIDTIMEQ6 @ 15 * GEOLONQ4 @ 100 * -  
+   S>D NORMALIZE 15 / SIDTIMELCLQ6 ! ;
+
+VARIABLE ARMCQ6
+VARIABLE MCQ6
+VARIABLE ASCQ6
+
+: CALCMC ( -- )
+   SIDTIMELCLQ6 @ 15 * S>D NORMALIZE ARMCQ6 ! 
+   ARMCQ6 @ RADIANS DUP >R TOPOW28 TAN 
+   OBLIQUITYQ6 @ RADIANS DOCOS ATAN2NEG 
+   DUP 0< IF PIQ6 + THEN 
+   R> PIQ6 > IF PIQ6 + THEN 
+   RNORMALIZE S>D DEGREES D>S MCQ6 ! ;
+
+: CALCASC ( -- )
+   ARMCQ6 @ RADIANS OBLIQUITYQ6 @ RADIANS >R 
+   ( rARMC )  ( R: rObl )
+   DUP DOSIN NEGATE S>D R@ DOCOS 1000000 M*/ 
+   GEOLATQ4 @ 100 * RADIANS TOPOW28 TAN S>D 
+   R> DOSIN 1000000 M*/ D- D>S SWAP 
+   DOCOS ANGLE 
+   S>D DEGREES NORMALIZE ASCQ6 ! ;
+
+: .ASCMC  ( -- )
+   CR ." Asc: " ASCQ6 @ DMS .DMS ."    MC: " MCQ6 @ DMS .DMS ;
+
+2VARIABLE JD
+2VARIABLE JDE
+
+: CALCPARS  ( y m d tQ4 lonPlaceQ4 latPlaceQ4 altPlace -- )
+   GEOALT ! GEOLATQ4 ! GEOLONQ4 !
+   >R 3DUP R> CALCJD JD 2! CALCDELTAT JD 2@ ROT 10000 86400 */ M+ 
+   2DUP JDE 2! 2DUP CALCNUTATIONSIMPL NUTINOBLQ6 ! NUTINLONQ6 !
+   CALCOBLECLSIMPL OBLIQUITYQ6 ! JD 2@ CALCSIDTIME CALCLOCALSIDTIME ;
+
+: .PARS  ( -- )
+   CR ." JD=" JD 2@ 4 .Q ."  JDE=" JDE 2@ 4 .Q 
+   CR ." NutInLon=" NUTINLONQ6 @ S>D 6 .Q 
+      ."  NutInObl=" NUTINOBLQ6 @ S>D 6 .Q ."  Obliquity=" OBLIQUITYQ6 @ DMS .DMS
+   CR ." sidtime: " SIDTIMEQ6 @ DMS .TIME 
+      ."  sidtimelcl: " SIDTIMELCLQ6 @ DMS .TIME ;
+
+: CALCSUN  ( JDEdQ4 -- L0Q6 B0Q6 R0Q6 LQ6 BQ6 RQ6 )
+   EARTHL PLARRL ! EARTHLLEN PLARRLLEN ! EARTHLCNT PLARRLCNT !
+   EARTHB PLARRB ! EARTHBLEN PLARRBLEN ! EARTHBCNT PLARRBCNT !
+   EARTHR PLARRR ! EARTHRLEN PLARRRLEN ! EARTHRCNT PLARRRCNT !
+   TRUE ISSUN ! CALCPLANET ;
+
+: SUN!  ( L0Q6 B0Q6 R0Q6 LQ6 BQ6 RQ6 -- )
+   SUNRQ6 ! SUNBQ6 ! SUNLQ6 ! 
+   SUNR0Q6 ! SUNB0Q6 ! SUNL0Q6 ! ;
+
+: CALCMERCURY  ( JDEdQ4 -- L0Q6 B0Q6 R0Q6 LQ6 BQ6 RQ6 )
+   MERCURYL PLARRL ! MERCURYLLEN PLARRLLEN ! MERCURYLCNT PLARRLCNT !
+   MERCURYB PLARRB ! MERCURYBLEN PLARRBLEN ! MERCURYBCNT PLARRBCNT !
+   MERCURYR PLARRR ! MERCURYRLEN PLARRRLEN ! MERCURYRCNT PLARRRCNT !
+   FALSE ISSUN ! CALCPLANET ;
+
+: MERCURY!  ( L0Q6 B0Q6 R0Q6 LQ6 BQ6 RQ6 -- )
+   MERCURYRQ6 ! MERCURYBQ6 ! MERCURYLQ6 ! 
+   MERCURYR0Q6 ! MERCURYB0Q6 ! MERCURYL0Q6 ! ;
+
+: CALCVENUS  ( JDEdQ4 -- L0Q6 B0Q6 R0Q6 LQ6 BQ6 RQ6 )
+   VENUSL PLARRL ! VENUSLLEN PLARRLLEN ! VENUSLCNT PLARRLCNT !
+   VENUSB PLARRB ! VENUSBLEN PLARRBLEN ! VENUSBCNT PLARRBCNT !
+   VENUSR PLARRR ! VENUSRLEN PLARRRLEN ! VENUSRCNT PLARRRCNT !
+   FALSE ISSUN ! CALCPLANET ;
+
+: VENUS!  ( L0Q6 B0Q6 R0Q6 LQ6 BQ6 RQ6 -- )
+   VENUSRQ6 ! VENUSBQ6 ! VENUSLQ6 ! 
+   VENUSR0Q6 ! VENUSB0Q6 ! VENUSL0Q6 ! ;
+
+: CALCMARS  ( JDEdQ4 -- L0Q6 B0Q6 R0Q6 LQ6 BQ6 RQ6 )
+   MARSL PLARRL ! MARSLLEN PLARRLLEN ! MARSLCNT PLARRLCNT !
+   MARSB PLARRB ! MARSBLEN PLARRBLEN ! MARSBCNT PLARRBCNT !
+   MARSR PLARRR ! MARSRLEN PLARRRLEN ! MARSRCNT PLARRRCNT !
+   FALSE ISSUN ! CALCPLANET ;
+
+: MARS!  ( L0Q6 B0Q6 R0Q6 LQ6 BQ6 RQ6 -- )
+   MARSRQ6 ! MARSBQ6 ! MARSLQ6 ! 
+   MARSR0Q6 ! MARSB0Q6 ! MARSL0Q6 ! ;
+
+: CALCJUPITER  ( JDEdQ4 -- L0Q6 B0Q6 R0Q6 LQ6 BQ6 RQ6 )
+   JUPITERL PLARRL ! JUPITERLLEN PLARRLLEN ! JUPITERLCNT PLARRLCNT !
+   JUPITERB PLARRB ! JUPITERBLEN PLARRBLEN ! JUPITERBCNT PLARRBCNT !
+   JUPITERR PLARRR ! JUPITERRLEN PLARRRLEN ! JUPITERRCNT PLARRRCNT !
+   FALSE ISSUN ! CALCPLANET ;
+
+: JUPITER!  ( L0Q6 B0Q6 R0Q6 LQ6 BQ6 RQ6 -- )
+   JUPITERRQ6 ! JUPITERBQ6 ! JUPITERLQ6 ! 
+   JUPITERR0Q6 ! JUPITERB0Q6 ! JUPITERL0Q6 ! ;
+
+: CALCSATURN  ( JDEdQ4 -- L0Q6 B0Q6 R0Q6 LQ6 BQ6 RQ6 )
+   SATURNL PLARRL ! SATURNLLEN PLARRLLEN ! SATURNLCNT PLARRLCNT !
+   SATURNB PLARRB ! SATURNBLEN PLARRBLEN ! SATURNBCNT PLARRBCNT !
+   SATURNR PLARRR ! SATURNRLEN PLARRRLEN ! SATURNRCNT PLARRRCNT !
+   FALSE ISSUN ! CALCPLANET ;
+
+: SATURN!  ( L0Q6 B0Q6 R0Q6 LQ6 BQ6 RQ6 -- )
+   SATURNRQ6 ! SATURNBQ6 ! SATURNLQ6 ! 
+   SATURNR0Q6 ! SATURNB0Q6 ! SATURNL0Q6 ! ;
+
+: MOON!  ( LQ6 BQ6 RQ6 -- )
+   MOONRQ6 ! MOONBQ6 ! MOONLQ6 ! ;
+
+: DIFF8360  ( xQ6 yQ6 -- zQ6 )
+   - DUP 180000000 >= 
+   IF 360000000 - ELSE DUP -180000000 < IF 360000000 + THEN THEN ;
+
+( the Sun, and the Moon can't be retrograde, 
+  the Nodes of the Moon are frequently retrograde)
+( We don't compute it for Uranus, Neptune and Pluto)
+( values below are for Sun, Moon, Mercury ... Pluto, Node)
+( To check if a planet is retrograde or not:)
+CREATE INTERVALQ4 0 W, 0 W, 20 W, 20 W, 40 W, 250 W, 500 W, 0 W, 0 W, 0 W, 500 W, 
+
+11 CONSTANT RETRCNT
+CREATE RETRS RETRCNT ALLOT 
+
+: INITRETRS  ( -- )
+   RETRS RETRCNT ERASE ;
+
+INITRETRS
+
+VARIABLE SUNL0Q6SAVED
+VARIABLE SUNB0Q6SAVED
+VARIABLE SUNR0Q6SAVED
+
+: SAVESUN  ( -- )
+   SUNL0Q6 @ SUNL0Q6SAVED ! SUNB0Q6 @ SUNB0Q6SAVED ! 
+   SUNR0Q6 @ SUNR0Q6SAVED ! ; 
+
+: RESTORESUN  ( -- )
+   SUNL0Q6SAVED @ SUNL0Q6 ! SUNB0Q6SAVED @ SUNB0Q6 ! 
+   SUNR0Q6SAVED @ SUNR0Q6 ! ; 
+
+: CALCSUNFORRETR  ( JDEQ4 -- )
+   CALCSUN 2DROP DROP SUNR0Q6 ! SUNB0Q6 ! SUNL0Q6 ! ;
+
+: CALCRETR  ( JDEdQ4 -- )
+   INITRETRS SAVESUN
+   2DUP INTERVALQ4 4 + W@ S>D D+ 
+   2DUP CALCSUNFORRETR
+   CALCMERCURY 2DROP >R 2DROP DROP R> MERCURYLQ6 @ 
+   DIFF8360 0< IF 1 RETRS 2 + C! THEN
+   2DUP INTERVALQ4 6 + W@ S>D D+ 
+   2DUP CALCSUNFORRETR
+   CALCVENUS 2DROP >R 2DROP DROP R> VENUSLQ6 @ 
+   DIFF8360 0< IF 1 RETRS 3 + C! THEN
+   2DUP INTERVALQ4 8 + W@ S>D D+ 
+   2DUP CALCSUNFORRETR
+   CALCMARS 2DROP >R 2DROP DROP R> MARSLQ6 @ 
+   DIFF8360 0< IF 1 RETRS 4 + C! THEN
+   2DUP INTERVALQ4 10 + W@ S>D D+ 
+   2DUP CALCSUNFORRETR
+   CALCJUPITER 2DROP >R 2DROP DROP R> JUPITERLQ6 @ 
+   DIFF8360 0< IF 1 RETRS 5 + C! THEN
+   2DUP INTERVALQ4 12 + W@ S>D D+ 
+   2DUP CALCSUNFORRETR
+   CALCSATURN 2DROP >R 2DROP DROP R> SATURNLQ6 @ 
+   DIFF8360 0< IF 1 RETRS 6 + C! THEN
+   INTERVALQ4 20 + W@ S>D D+ 
+   2DUP CALCSUNFORRETR
+   CALCNODE
+   NODELQ6 @ DIFF8360  0< IF 1 RETRS 10 + C! THEN
+   RESTORESUN ;
+
+: CALCPLANETS  ( JDEdQ4 -- )
+   2DUP CALCSUN SUN! 2DUP CALCMOON MOON! 2DUP CALCMERCURY MERCURY! 
+   2DUP CALCVENUS VENUS! 2DUP CALCMARS MARS! 
+   2DUP CALCJUPITER JUPITER! 2DUP CALCSATURN SATURN! 
+   2DUP CALCNODE NODELQ6 ! CALCRETR ;
+
+: EQU2HOR  ( HQ6 declQ6 -- aziQ6 altQ6 )
+   RADIANS SWAP RADIANS SWAP GEOLATQ4 @ 100 * RADIANS >R
+   ( rHQ6 rdeclQ6 )   ( R: rGeoLatQ6 )
+   OVER DOCOS S>D R@ DOSIN 1000000 M*/NEG 
+   2 PICK TOPOW28 TAN S>D R@ DOCOS 1000000 M*/NEG D- D>S
+   DUP 0<> 
+   ( rHQ6 rdeclQ6 denomin flag )   ( R: rGeoLatQ6 )
+   IF 2 PICK DOSIN SWAP ATAN2 S>D DEGREES NORMALIZE THEN 
+   ( rHQ6 rdeclQ6 azi )   ( R: rGeoLatQ6 )
+   R@ DOSIN S>D 3 PICK TOPOW28 SIN TOQ6 1000000 M*/NEG 
+   R> DOCOS S>D 5 ROLL TOPOW28 COS TOQ6 1000000 M*/NEG 
+   5 ROLL DOCOS 1000000 M*/NEG D+ D>S ASIN S>D DEGREES D>S ;
+
+: .POS  ( -- )
+   CR ." Sun:     " ." lon=" SUNLQ6 @ DMS .DMS 
+      ." lat=" SUNBQ6 @ DUP .HEMIS DMS .DMS ." rad=" SUNRQ6 @ S>D 6 .Q
+   SUNLQ6 @ SUNBQ6 @ OBLIQUITYQ6 @ TRANSFORM 2DUP 2>R
+   CR ."          " ." ra=" SWAP DMS .DMS ." decl=" DUP .HEMIS DMS .DMS
+   2R> SWAP CALCH SWAP EQU2HOR  
+   CR ."          " ." azi=" SWAP DMS .DMS ." alt=" DUP .HEMIS DMS .DMS
+   CR ." Moon:    " ." lon=" MOONLQ6 @ DMS .DMS 
+      ." lat=" MOONBQ6 @ DUP .HEMIS DMS .DMS ." rad=" MOONRQ6 @ S>D 3 .Q
+   MOONLQ6 @ MOONBQ6 @ OBLIQUITYQ6 @ TRANSFORM 2DUP 2>R
+   CR ."          " ." ra=" SWAP DMS .DMS ." decl=" DUP .HEMIS DMS .DMS
+   2R> SWAP CALCH SWAP EQU2HOR  
+   CR ."          " ." azi=" SWAP DMS .DMS ." alt=" DUP .HEMIS DMS .DMS
+   CR ." Mercury: " ." lon=" MERCURYLQ6 @ DMS .DMS 
+      ." lat=" MERCURYBQ6 @ DUP .HEMIS DMS .DMS ." rad=" MERCURYRQ6 @ S>D 6 .Q
+      RETRS 2 + C@ 1 = IF ." R" THEN 
+   MERCURYLQ6 @ MERCURYBQ6 @ OBLIQUITYQ6 @ TRANSFORM 2DUP 2>R
+   CR ."          " ." ra=" SWAP DMS .DMS ." decl=" DUP .HEMIS DMS .DMS
+   2R> SWAP CALCH SWAP EQU2HOR  
+   CR ."          " ." azi=" SWAP DMS .DMS ." alt=" DUP .HEMIS DMS .DMS
+   CR ." Venus:   " ." lon=" VENUSLQ6 @ DMS .DMS 
+      ." lat=" VENUSBQ6 @ DUP .HEMIS DMS .DMS ." rad=" VENUSRQ6 @ S>D 6 .Q
+      RETRS 3 + C@ 1 = IF ." R" THEN 
+   VENUSLQ6 @ VENUSBQ6 @ OBLIQUITYQ6 @ TRANSFORM 2DUP 2>R
+   CR ."          " ." ra=" SWAP DMS .DMS ." decl=" DUP .HEMIS DMS .DMS
+   2R> SWAP CALCH SWAP EQU2HOR  
+   CR ."          " ." azi=" SWAP DMS .DMS ." alt=" DUP .HEMIS DMS .DMS
+   CR ." Mars:    " ." lon=" MARSLQ6 @ DMS .DMS 
+      ." lat=" MARSBQ6 @ DUP .HEMIS DMS .DMS ." rad=" MARSRQ6 @ S>D 6 .Q
+	  RETRS 4 + C@ 1 = IF ." R" THEN 
+   MARSLQ6 @ MARSBQ6 @ OBLIQUITYQ6 @ TRANSFORM 2DUP 2>R
+   CR ."          " ." ra=" SWAP DMS .DMS ." decl=" DUP .HEMIS DMS .DMS
+   2R> SWAP CALCH SWAP EQU2HOR  
+   CR ."          " ." azi=" SWAP DMS .DMS ." alt=" DUP .HEMIS DMS .DMS
+   CR ." Jupiter: " ." lon=" JUPITERLQ6 @ DMS .DMS 
+      ." lat=" JUPITERBQ6 @ DUP .HEMIS DMS .DMS ." rad=" JUPITERRQ6 @ S>D 6 .Q
+      RETRS 5 + C@ 1 = IF ." R" THEN 
+   JUPITERLQ6 @ JUPITERBQ6 @ OBLIQUITYQ6 @ TRANSFORM 2DUP 2>R
+   CR ."          " ." ra=" SWAP DMS .DMS ." decl=" DUP .HEMIS DMS .DMS
+   2R> SWAP CALCH SWAP EQU2HOR  
+   CR ."          " ." azi=" SWAP DMS .DMS ." alt=" DUP .HEMIS DMS .DMS
+   CR ." Saturn:  " ." lon=" SATURNLQ6 @ DMS .DMS 
+      ." lat=" SATURNBQ6 @ DUP .HEMIS DMS .DMS ." rad=" SATURNRQ6 @ S>D 6 .Q
+      RETRS 6 + C@ 1 = IF ." R" THEN 
+   SATURNLQ6 @ SATURNBQ6 @ OBLIQUITYQ6 @ TRANSFORM 2DUP 2>R
+   CR ."          " ." ra=" SWAP DMS .DMS ." decl=" DUP .HEMIS DMS .DMS
+   2R> SWAP CALCH SWAP EQU2HOR  
+   CR ."          " ." azi=" SWAP DMS .DMS ." alt=" DUP .HEMIS DMS .DMS
+   CR ." Node:    " ." lon=" NODELQ6 @ DMS .DMS 
+      RETRS 10 + C@ 1 = IF ." R" THEN 
+   NODELQ6 @ 0 OBLIQUITYQ6 @ TRANSFORM 2DUP 2>R
+   CR ."          " ." ra=" SWAP DMS .DMS ." decl=" DUP .HEMIS DMS .DMS 
+   2R> SWAP CALCH SWAP EQU2HOR  
+   CR ."          " ." azi=" SWAP DMS .DMS ." alt=" DUP .HEMIS DMS .DMS ;
+
+12 CONSTANT HCNT
+( contains the house-cusps as Q6)
+CREATE HCSQ6 HCNT CELLS ALLOT 
+
+: CUSPPLACIDUS  ( degQ6 FFQ6 flagNeg -- lonQ6 )
+   ROT RADIANS 
+   GEOLATQ4 @ DUP 0= IF DROP 100 ELSE 100 * THEN 
+   RADIANS ARMCQ6 @ RADIANS OBLIQUITYQ6 @ RADIANS  
+  ( FFQ6 flagNeg rDegQ6 rGeoLat rARMC rOBLIQUITY )
+   OVER 4 ROLL +    ( FFQ6 flagNeg rGeoLat rARMC rOBLIQUITY rARMC+rDeg )
+   RNORMALIZENEG 
+   10 0 
+   DO 
+    ( FFQ6 flagNeg rGeoLat rARMC rOBLIQUITY rARMC+rDeg )
+     DOSIN S>D 2 PICK TOPOW28 TAN 1000000 M*/NEG 
+      4 PICK TOPOW28 TAN 1000000 M*/NEG D>S
+     4 PICK INVERT IF NEGATE THEN 
+     ACOS 
+    ( FFQ6 flagNeg rGeoLat rARMC rOBLIQUITY XS )
+     DUP 0< IF PIQ6 + THEN 
+    ( FFQ6 flagNeg rGeoLat rARMC rOBLIQUITY XS )
+     S>D 1000000 1 M*/NEG 1 7 PICK M*/NEG D>S 
+    ( FFQ6 flagNeg rGeoLat rARMC rOBLIQUITY XS/FF )
+     4 PICK IF PIQ6 SWAP - THEN   ( RNORMALIZE!?)
+    ( FFQ6 flagNeg rGeoLat rARMC rOBLIQUITY val )
+     2 PICK + 
+     RNORMALIZENEG 
+    ( FFQ6 flagNeg rGeoLat rARMC rOBLIQUITY rARMC+val )
+   LOOP 
+   DUP TOPOW28 TAN ROT DOCOS >R S>D 1000000 1 M*/NEG 
+   1 R> M*/NEG D>S 1000000 ATAN2NEG
+  ( FFQ6 flagNeg rGeoLat rARMC rARMC+val LO )
+   DUP 0< IF PIQ6 + THEN 
+   SWAP DOSIN 0< IF PIQ6 + THEN 
+  ( FFQ6 flagNeg rGeoLat rARMC LO )
+   >R 2DROP 2DROP R> S>D DEGREES D>S ;
+
+( fills HCS)
+( from Astrolog)
+: PLACIDUS  ( -- )
+   ASCQ6 @ HCSQ6 !
+   MCQ6 @ 180000000 + S>D NORMALIZE HCSQ6 3 CELLS + ! 
+   30000000 3000000 FALSE CUSPPLACIDUS 180000000 + HCSQ6 4 CELLS + ! 
+   60000000 1500000 FALSE CUSPPLACIDUS 180000000 + HCSQ6 5 CELLS + ! 
+   120000000 1500000 TRUE CUSPPLACIDUS HCSQ6 1 CELLS + ! 
+   150000000 3000000 TRUE CUSPPLACIDUS HCSQ6 2 CELLS + ! 
+   HCNT 0 
+   DO 
+     I 5 <= 
+     IF HCSQ6 I CELLS + DUP >R @ S>D NORMALIZE R> !
+     ELSE HCSQ6 I 6 - CELLS + @ S>D 180000000. D+ NORMALIZE 
+          HCSQ6 I CELLS + !
+     THEN 
+   LOOP ;
+
+: .HCS  ( -- )
+   CR ." Placidus housecusps:" CR
+   HCNT 0 DO HCSQ6 I CELLS + @ DMS .DMS CR LOOP ;
+
+: TEST  ( -- )
+   CR ." Albert Einstein March 14, 1879 10:50 UT Ulm, Germany "
+   1879 3 14 10 10000 * 50 10000 * 60 / + ( no seconds)
+   -99876 484011 100 CALCPARS .PARS JDE 2@ CALCPLANETS .POS 
+   CALCMC CALCASC .ASCMC 
+   CR ." Press a key." KEY? PLACIDUS .HCS ;
+
+
